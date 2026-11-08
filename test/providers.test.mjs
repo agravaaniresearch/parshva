@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { buildChatRequest, parseSSE, extractDelta, streamChat, listModels, originPattern } from "../extension/lib/providers.js";
+import { buildChatRequest, parseSSE, extractDelta, streamChat, listModels, originPattern, estimateTokens, extractUsage } from "../extension/lib/providers.js";
 
 const openai = { kind: "openai", baseUrl: "http://127.0.0.1:0/v1/", apiKey: "k" };
 const claude = { kind: "anthropic", baseUrl: "https://api.anthropic.com/v1", apiKey: "sk" };
@@ -185,6 +185,56 @@ test("listModels handles OpenAI and Anthropic shapes", async () => {
     async (base) => {
       assert.deepEqual(await listModels({ ...openai, baseUrl: base + "/v1" }), ["a", "b"]);
       assert.deepEqual(await listModels({ ...claude, baseUrl: base }), ["a", "b"]);
+    }
+  );
+});
+
+test("estimateTokens: ~4 chars/token, more for non-ASCII", () => {
+  assert.equal(estimateTokens(""), 0);
+  assert.equal(estimateTokens("a".repeat(400)), 100);
+  assert.ok(estimateTokens("日本語".repeat(100)) > 100);
+});
+
+test("extractUsage: OpenAI and Anthropic shapes", () => {
+  assert.deepEqual(extractUsage("openai", { data: '{"usage":{"prompt_tokens":12,"completion_tokens":5}}' }), { input: 12, output: 5 });
+  assert.equal(extractUsage("openai", { data: '{"choices":[]}' }), null);
+  const a = extractUsage("anthropic", { data: '{"type":"message_start","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":4}}}' });
+  assert.equal(a.input, 14);
+  assert.deepEqual(extractUsage("anthropic", { data: '{"type":"message_delta","usage":{"output_tokens":7}}' }), { output: 7 });
+});
+
+test("OpenAI request asks for usage; includeUsage:false omits it", () => {
+  const on = buildChatRequest(openai, "m", [{ role: "user", content: "x" }], "s");
+  assert.deepEqual(on.body.stream_options, { include_usage: true });
+  const off = buildChatRequest(openai, "m", [{ role: "user", content: "x" }], "s", { includeUsage: false });
+  assert.equal(off.body.stream_options, undefined);
+});
+
+test("end to end: usage reported, and retry without stream_options on 400", async () => {
+  let calls = 0;
+  await withServer(
+    (req, res) => {
+      let b = "";
+      req.on("data", (c) => (b += c));
+      req.on("end", () => {
+        calls++;
+        if (JSON.parse(b).stream_options) {
+          res.writeHead(400);
+          return res.end('{"error":{"message":"unknown parameter: stream_options"}}');
+        }
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ usage: { prompt_tokens: 3, completion_tokens: 1 } })}\n\ndata: [DONE]\n\n`);
+        res.end();
+      });
+    },
+    async (base) => {
+      let text = "", u = null;
+      for await (const d of streamChat({ provider: { ...openai, baseUrl: base + "/v1" }, model: "m", messages: [{ role: "user", content: "x" }], onUsage: (x) => (u = x) })) text += d;
+      assert.equal(text, "hi");
+      assert.equal(calls, 2);
+      assert.equal(u.input, 3);
+      assert.equal(u.output, 1);
     }
   );
 });

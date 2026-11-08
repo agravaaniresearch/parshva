@@ -159,6 +159,30 @@ async function init() {
     $("settings-status").textContent = "Saved.";
   };
   render();
+  renderUsage();
+  $("reset-usage").onclick = async () => {
+    await api.storage.local.set({ usage: {} });
+    renderUsage();
+  };
+  api.storage.onChanged.addListener((c) => c.usage && renderUsage());
+}
+
+async function renderUsage() {
+  const { usage = {} } = await api.storage.local.get("usage");
+  const box = $("usage");
+  box.replaceChildren();
+  const rows = Object.entries(usage);
+  if (!rows.length) return box.append(el("p", { class: "status", text: "No usage recorded yet." }));
+  const n = (v) => Number(v || 0).toLocaleString();
+  const head = el("tr", {}, ...["Provider / model", "Requests", "Input", "Output"].map((t) => el("th", { text: t })));
+  const table = el("table", { class: "usage-table" }, head);
+  let tot = { requests: 0, input: 0, output: 0 };
+  for (const [k, u] of rows.sort()) {
+    tot.requests += u.requests; tot.input += u.input; tot.output += u.output;
+    table.append(el("tr", {}, el("td", { text: k.replace("::", " / ") }), el("td", { text: n(u.requests) }), el("td", { text: n(u.input) }), el("td", { text: n(u.output) })));
+  }
+  table.append(el("tr", { class: "tot" }, el("td", { text: "Total" }), el("td", { text: n(tot.requests) }), el("td", { text: n(tot.input) }), el("td", { text: n(tot.output) })));
+  box.append(table);
 }
 
 init();

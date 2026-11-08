@@ -29,7 +29,7 @@ function authHeaders(provider) {
   return provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {};
 }
 
-export function buildChatRequest(provider, model, messages, system) {
+export function buildChatRequest(provider, model, messages, system, { includeUsage = true } = {}) {
   const clean = messages.map((m) => ({ role: m.role, content: m.content }));
   if (provider.kind === "anthropic") {
     const body = { model, max_tokens: 8192, stream: true, messages: clean };
@@ -44,8 +44,50 @@ export function buildChatRequest(provider, model, messages, system) {
   return {
     url: `${trimSlash(provider.baseUrl)}/chat/completions`,
     headers: { ...authHeaders(provider), "content-type": "application/json" },
-    body: { model, messages: msgs, stream: true },
+    body: {
+      model,
+      messages: msgs,
+      stream: true,
+      ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
+    },
   };
+}
+
+// Rough local estimate: about 4 characters per token for Latin text, about 1.5 for other scripts.
+export function estimateTokens(text) {
+  let ascii = 0;
+  let other = 0;
+  for (const ch of String(text || "")) {
+    if (ch.charCodeAt(0) < 128) ascii++;
+    else other++;
+  }
+  return Math.ceil(ascii / 4 + other / 1.5);
+}
+
+// Token counts reported by the provider, when present: { input?, output? } or null.
+export function extractUsage(kind, ev) {
+  let j;
+  try {
+    j = JSON.parse(ev.data);
+  } catch {
+    return null;
+  }
+  if (kind === "anthropic") {
+    if (j.type === "message_start" && j.message?.usage) {
+      const u = j.message.usage;
+      const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+      return { input, output: u.output_tokens || 0 };
+    }
+    if (j.type === "message_delta" && j.usage && j.usage.output_tokens != null) {
+      return { output: j.usage.output_tokens };
+    }
+    return null;
+  }
+  const u = j.usage;
+  if (u && (u.prompt_tokens != null || u.completion_tokens != null)) {
+    return { input: u.prompt_tokens || 0, output: u.completion_tokens || 0 };
+  }
+  return null;
 }
 
 // Server-sent events parser. Yields { event, data } objects.
@@ -143,16 +185,32 @@ async function describeError(res) {
   return `${res.status} ${res.statusText}${msg ? `: ${msg}` : ""}`;
 }
 
-export async function* streamChat({ provider, model, messages, system, signal, fetchImpl = fetch }) {
-  const req = buildChatRequest(provider, model, messages, system);
-  const res = await fetchImpl(req.url, {
-    method: "POST",
-    headers: req.headers,
-    body: JSON.stringify(req.body),
-    signal,
-  });
+export async function* streamChat({ provider, model, messages, system, signal, onUsage, fetchImpl = fetch }) {
+  const post = (includeUsage) => {
+    const req = buildChatRequest(provider, model, messages, system, { includeUsage });
+    return fetchImpl(req.url, {
+      method: "POST",
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal,
+    });
+  };
+  let res = await post(true);
+  // A few strict OpenAI-compatible servers reject stream_options; retry once without it.
+  if (!res.ok && provider.kind === "openai" && res.status === 400) {
+    const text = await res.clone().text().catch(() => "");
+    if (/stream_options|include_usage/i.test(text)) res = await post(false);
+  }
   if (!res.ok) throw new Error(await describeError(res));
+
+  const usage = { input: 0, output: 0 };
   for await (const ev of parseSSE(res.body)) {
+    const u = extractUsage(provider.kind, ev);
+    if (u) {
+      if (u.input != null) usage.input = u.input;
+      if (u.output != null) usage.output = u.output;
+      if (onUsage) onUsage({ ...usage });
+    }
     const d = extractDelta(provider.kind, ev);
     if (d === DONE) return;
     if (d) yield d;

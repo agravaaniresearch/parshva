@@ -6,6 +6,7 @@
   --text: #26211b;
   --muted: #7a6f62;
   --border: #e2dacb;
+  --field: #b9ad99;
   --accent: #b4531a;
   --accent-text: #fff8f0;
   --code-bg: #efe9dd;
@@ -23,6 +24,7 @@
     --text: #ece6dc;
     --muted: #9a8f80;
     --border: #36312a;
+    --field: #6a6256;
     --accent: #e0894a;
     --accent-text: #1c1916;
     --code-bg: #14120f;

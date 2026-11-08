@@ -58,3 +58,11 @@ test("pathological input does not hang", () => {
   renderMarkdown("*".repeat(20000) + "\n" + "[".repeat(5000) + "\n" + "|".repeat(5000));
   assert.ok(Date.now() - t < 2000);
 });
+
+import { mdToPlain } from "../extension/lib/markdown.js";
+test("mdToPlain strips markup and keeps link URLs", () => {
+  const out = mdToPlain("## Title\n\n**bold** and `code` [site](https://a.com)\n\n- one\n- two");
+  assert.ok(!out.includes("##") && !out.includes("**") && !out.includes("`"));
+  assert.ok(out.includes("site (https://a.com)"));
+  assert.ok(out.includes("one") && out.includes("two"));
+});

@@ -293,3 +293,116 @@
   text-align: center;
   color: var(--muted);
 }
+
+/* page bar: title and token estimate */
+.pagebar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.pagebar[hidden] {
+  display: none;
+}
+.pagebar .pt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.pagebar .pc {
+  flex: none;
+}
+
+/* source line at the top of an answer */
+.source {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.source .src-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.source a,
+.source .src-title {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.source a:hover {
+  text-decoration: underline;
+}
+.source .src-url {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.usage {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* prominent action bar above the composer */
+.actionbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+.actionbar[hidden] {
+  display: none;
+}
+.copy-main {
+  flex: 1;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 650;
+  font-size: 14.5px;
+}
+.copy-main:hover {
+  filter: brightness(1.06);
+}
+.ghost-btn {
+  height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--field);
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+}
+.ghost-btn:hover {
+  background: var(--surface);
+}
+.actionbar .ico {
+  display: grid;
+}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parshva",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An AI chat sidebar for any OpenAI-compatible provider or Claude. Bring your own keys; nothing goes anywhere except the provider you choose.",
   "icons": {
     "48": "icons/icon.svg",
@@ -19,7 +19,7 @@
   "background": {
     "scripts": ["background.js"]
   },
-  "permissions": ["storage", "contextMenus", "scripting"],
+  "permissions": ["storage", "contextMenus", "scripting", "tabs"],
   "optional_host_permissions": ["<all_urls>"],
   "sidebar_action": {
     "default_title": "Parshva",

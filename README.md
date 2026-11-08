@@ -41,3 +41,11 @@ npx web-ext run --source-dir extension   # launches Firefox with the extension l
 - `extension/sidebar/`: the chat UI
 - `extension/options/`: provider and prompt settings
 - `.github/workflows/release.yml`: build, version, sign, release
+
+## v0.2.0
+
+- A new page starts a clean chat; returning to a page restores its chat (kept in memory only).
+- Every answer records its source (page title and URL), and the Copy output starts with it.
+- Prominent Copy button, plus Plain text (Markdown stripped) and Retry.
+- Page bar shows the page size and an estimated token count before you send; each reply shows the provider's real input/output tokens.
+- Settings has a Usage table of tokens per provider and model. Providers do not expose credit balances through API keys.

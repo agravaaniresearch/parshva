@@ -161,6 +161,25 @@ export function renderMarkdown(src) {
   return out.join("");
 }
 
+// Markdown to readable plain text, for the "Plain text" copy button.
+export function mdToPlain(src) {
+  return String(src)
+    .replace(/\r\n?/g, "\n")
+    .replace(/^\s*(```|~~~)[\w+#.-]*\n?/gm, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/^\s*([-*_])\s*(\1\s*){2,}$/gm, "")
+    .replace(/^(\s*)[-*+]\s+/gm, "$1- ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, "$1 ($2)")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, "$1$2")
+    .replace(/~~([^~\n]+)~~/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Parse an HTML string into inert nodes and put them into `container`.
 export function setHTML(container, html) {
   const doc = new DOMParser().parseFromString(html, "text/html");

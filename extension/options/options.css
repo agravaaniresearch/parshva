@@ -123,3 +123,8 @@ button.danger {
 .presets button:hover {
   background: var(--surface);
 }
+
+.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+.usage-table th, .usage-table td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.usage-table th:first-child, .usage-table td:first-child { text-align: left; }
+.usage-table .tot td { font-weight: 600; }

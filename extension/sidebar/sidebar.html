@@ -27,6 +27,8 @@
       <button id="btn-page" class="chip" aria-pressed="false" title="Send the current page's text along with your message">Page</button>
     </div>
 
+    <div id="pagebar" class="pagebar" hidden></div>
+
     <main id="messages" aria-live="polite"></main>
 
     <section id="history" class="history" hidden>
@@ -38,6 +40,12 @@
       </div>
       <ul id="history-list"></ul>
     </section>
+
+    <div id="actionbar" class="actionbar" hidden>
+      <button id="btn-copy" class="copy-main" type="button"><span class="ico"></span><span class="lbl">Copy</span></button>
+      <button id="btn-plain" class="ghost-btn" type="button"><span class="lbl">Plain text</span></button>
+      <button id="btn-retry" class="ghost-btn" type="button" aria-label="Retry"><span class="ico"></span></button>
+    </div>
 
     <div id="notice" class="notice" hidden></div>
 

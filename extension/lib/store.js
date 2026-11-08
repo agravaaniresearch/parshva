@@ -31,6 +31,19 @@ export async function getState() {
 
 export const save = (obj) => api.storage.local.set(obj);
 
+// Running totals of provider-reported token usage, per provider and model.
+export async function addUsage(providerName, model, input, output) {
+  const { usage = {} } = await api.storage.local.get("usage");
+  const key = `${providerName}::${model}`;
+  const u = usage[key] || { requests: 0, input: 0, output: 0 };
+  u.requests += 1;
+  u.input += input || 0;
+  u.output += output || 0;
+  u.last = Date.now();
+  usage[key] = u;
+  await api.storage.local.set({ usage });
+}
+
 export function newProvider(preset) {
   return {
     id: crypto.randomUUID(),
