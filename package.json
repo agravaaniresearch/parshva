@@ -1,0 +1,15 @@
+{
+  "name": "parshva",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Parshva: an AI chat sidebar for Firefox",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "lint": "web-ext lint --source-dir extension",
+    "build": "web-ext build --source-dir extension --artifacts-dir dist --overwrite-dest"
+  },
+  "devDependencies": {
+    "web-ext": "^8.0.0"
+  }
+}

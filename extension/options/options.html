@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parshva settings</title>
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+    <h1>Parshva</h1>
+    <p class="lede">Add the providers you want in the sidebar. Keys stay in this browser and are sent only to the provider you add them for.</p>
+
+    <h2>Providers</h2>
+    <div id="providers"></div>
+
+    <h3>Add a provider</h3>
+    <div id="presets" class="presets"></div>
+
+    <h2>Behaviour</h2>
+    <label class="field">
+      <span>System prompt</span>
+      <textarea id="system" rows="4"></textarea>
+    </label>
+    <div class="row">
+      <button id="save-settings" class="primary">Save</button>
+      <span id="settings-status" class="status" role="status"></span>
+    </div>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

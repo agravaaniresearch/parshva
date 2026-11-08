@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Parshva",
+  "version": "0.1.0",
+  "description": "An AI chat sidebar for any OpenAI-compatible provider or Claude. Bring your own keys; nothing goes anywhere except the provider you choose.",
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "parshva@agravaani",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "permissions": ["storage", "contextMenus", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
+  "sidebar_action": {
+    "default_title": "Parshva",
+    "default_panel": "sidebar/sidebar.html",
+    "default_icon": "icons/icon.svg"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "_execute_sidebar_action": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Toggle the Parshva sidebar"
+    }
+  }
+}
