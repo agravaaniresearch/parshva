@@ -24,10 +24,6 @@ function field(label, input, hint) {
   return l;
 }
 
-function parseModels(text) {
-  return [...new Set(text.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean))];
-}
-
 function card(p) {
   const status = el("span", { class: "status", role: "status" });
   const say = (msg, err) => {
@@ -45,15 +41,54 @@ function card(p) {
   kind.value = p.kind;
   const url = el("input", { type: "text", value: p.baseUrl, placeholder: "https://api.example.com/v1" });
   const key = el("input", { type: "password", value: p.apiKey, autocomplete: "off", placeholder: "Leave empty for local servers" });
-  const models = el("textarea", { rows: "4", placeholder: "One model ID per line" });
-  models.value = (p.models || []).join("\n");
+  // catalog = every model ever fetched or added (never deleted by Fetch); models = the ticked ones shown in the sidebar picker.
+  const catalog = new Set([...(p.catalog || []), ...(p.models || [])]);
+  const picked = new Set(p.models || []);
+  const filter = el("input", { type: "text", placeholder: "Filter models" });
+  const list = el("div", { class: "modellist" });
+  const count = el("small", { class: "count" });
+  const manual = el("input", { type: "text", placeholder: "Add a model ID manually" });
+  const drawList = () => {
+    list.replaceChildren();
+    const q = filter.value.trim().toLowerCase();
+    const ids = [...catalog].sort((a, b) => (picked.has(b) - picked.has(a)) || a.localeCompare(b));
+    for (const id of ids) {
+      if (q && !id.toLowerCase().includes(q)) continue;
+      const cb = el("input", { type: "checkbox" });
+      cb.checked = picked.has(id);
+      cb.onchange = () => {
+        cb.checked ? picked.add(id) : picked.delete(id);
+        count.textContent = `${picked.size} of ${catalog.size} shown in the sidebar`;
+      };
+      list.append(el("label", { class: "mrow" }, cb, el("span", { text: id })));
+    }
+    if (!list.children.length) list.append(el("p", { class: "status", text: catalog.size ? "No match." : "No models yet. Fetch them or add one below." }));
+    count.textContent = `${picked.size} of ${catalog.size} shown in the sidebar`;
+  };
+  filter.oninput = drawList;
+  const addManual = el("button", {
+    class: "secondary",
+    text: "Add",
+    onclick: () => {
+      const id = manual.value.trim();
+      if (!id) return;
+      catalog.add(id);
+      picked.add(id);
+      manual.value = "";
+      filter.value = "";
+      drawList();
+    },
+  });
+  drawList();
+  const models = el("div", { class: "models" }, filter, list, count, el("div", { class: "row" }, manual, addManual));
 
   const pull = () => {
     p.name = name.value.trim() || "Provider";
     p.kind = kind.value;
     p.baseUrl = url.value.trim();
     p.apiKey = key.value.trim();
-    p.models = parseModels(models.value);
+    p.catalog = [...catalog].sort();
+    p.models = [...catalog].filter((id) => picked.has(id));
   };
 
   const validUrl = () => {
@@ -78,8 +113,10 @@ function card(p) {
       say("Fetching...");
       try {
         const ids = await listModels(p);
-        models.value = ids.join("\n");
-        say(`${ids.length} models found. Delete the ones you do not need, then Save.`);
+        const fresh = ids.filter((id) => !catalog.has(id)).length;
+        ids.forEach((id) => catalog.add(id));
+        drawList();
+        say(`${ids.length} fetched, ${fresh} new. Tick the ones to show in the sidebar, then Save.`);
       } catch (e) {
         say(e.message, true);
       }
@@ -120,7 +157,7 @@ function card(p) {
       field("API type", kind, "Use OpenAI-compatible for almost everything, including Grok, Qwen, OpenRouter and local servers."),
       field("Base URL", url),
       field("API key", key),
-      field("Models", models, "Fetch fills this from the provider, or type IDs yourself."),
+      field("Models", models, "Fetching adds to this list and never removes anything. Tick the models you want in the sidebar picker, such as a stronger one for technical work."),
       el("div", { class: "row" }, fetchBtn, saveBtn, status, del)
     )
   );

@@ -128,3 +128,10 @@ button.danger {
 .usage-table th, .usage-table td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .usage-table th:first-child, .usage-table td:first-child { text-align: left; }
 .usage-table .tot td { font-weight: 600; }
+
+.modellist { max-height: 220px; overflow: auto; border: 1px solid var(--field); border-radius: 8px; padding: 4px 6px; }
+.mrow { display: flex; align-items: center; gap: 8px; padding: 3px 2px; font-size: 13px; cursor: pointer; }
+.mrow input { width: auto; margin: 0; }
+.models .row { margin-top: 6px; }
+.models .row input { flex: 1; }
+.count { display: block; margin-top: 4px; }
