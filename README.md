@@ -49,3 +49,9 @@ npx web-ext run --source-dir extension   # launches Firefox with the extension l
 - Prominent Copy button, plus Plain text (Markdown stripped) and Retry.
 - Page bar shows the page size and an estimated token count before you send; each reply shows the provider's real input/output tokens.
 - Settings has a Usage table of tokens per provider and model. Providers do not expose credit balances through API keys.
+
+## v0.3.0
+
+- Sidebar model picker shows the active provider and model, grouped by provider, listing only providers whose key passed a test (all providers, with a note, until a test has run).
+- Settings: masked keys with Show/Hide, a Test key button and a status badge (works, invalid, network error, could not verify). Tests run in the background page.
+- Clearer Usage table: sent vs received, replies, average sent, last used, grouped by provider.

@@ -29,9 +29,15 @@
     </div>
 
     <h2>Usage</h2>
-    <p class="lede">Tokens reported by each provider for replies sent from this sidebar. Providers do not expose credit balances through API keys, so check your balance on their billing page.</p>
+    <p class="lede">A running count of the tokens each provider reported for replies sent from this sidebar. Tokens are the units providers bill by, roughly three quarters of a word each.</p>
+    <ul class="legend">
+      <li><strong>Sent</strong> is everything in a request: your question, the chat so far, your system prompt and the page text.</li>
+      <li><strong>Received</strong> is the reply. Many providers charge more for received tokens than for sent ones.</li>
+      <li>Counts come from the provider after each reply, so they are exact, but they are not money. Credit balances cannot be read with an API key, so check those on the provider's billing page.</li>
+    </ul>
     <div id="usage"></div>
     <div class="row">
+      <span id="usage-since" class="status"></span>
       <button id="reset-usage" class="secondary">Reset counters</button>
     </div>
   </div>

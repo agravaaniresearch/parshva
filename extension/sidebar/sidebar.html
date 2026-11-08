@@ -23,7 +23,13 @@
     </header>
 
     <div class="modelbar">
-      <select id="model-select" aria-label="Model"></select>
+      <div class="modelpick">
+        <button id="model-btn" class="modelbtn" type="button" aria-haspopup="listbox" aria-expanded="false" title="Choose provider and model">
+          <span class="mtxt"><span class="mprov"></span><span class="mname"></span></span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div id="model-menu" class="modelmenu" role="listbox" hidden></div>
+      </div>
       <button id="btn-page" class="chip" aria-pressed="false" title="Send the current page's text along with your message">Page</button>
     </div>
 

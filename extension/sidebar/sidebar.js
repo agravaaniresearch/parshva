@@ -1,5 +1,5 @@
 import { api, getState, save, addUsage } from "../lib/store.js";
-import { streamChat, estimateTokens } from "../lib/providers.js";
+import { streamChat, estimateTokens, isUsable, keySig, originPattern } from "../lib/providers.js";
 import { renderMarkdown, setHTML, mdToPlain } from "../lib/markdown.js";
 
 const $ = (id) => document.getElementById(id);
@@ -72,6 +72,7 @@ async function init() {
   renderAll();
   bind();
   consumePending();
+  backgroundTests();
   await syncPage(true);
 
   api.tabs.onActivated.addListener((info) => {
@@ -110,11 +111,14 @@ function bind() {
   $("btn-copy").onclick = (e) => copyLast(false, e.currentTarget);
   $("btn-plain").onclick = (e) => copyLast(true, e.currentTarget);
   $("btn-retry").onclick = retry;
-  $("model-select").onchange = (e) => {
-    const [providerId, ...rest] = e.target.value.split("::");
-    state.active = { providerId, model: rest.join("::") };
-    save({ active: state.active });
+  $("model-btn").onclick = (e) => {
+    e.stopPropagation();
+    $("model-menu").hidden ? openMenu() : closeMenu();
   };
+  document.addEventListener("click", (e) => {
+    if (!$("model-menu").hidden && !e.target.closest(".modelpick")) closeMenu();
+  });
+  document.addEventListener("keydown", (e) => e.key === "Escape" && closeMenu());
   const input = $("input");
   input.addEventListener("input", autosize);
   input.addEventListener("keydown", (e) => {
@@ -131,28 +135,100 @@ function autosize() {
   t.style.height = Math.min(t.scrollHeight, 160) + "px";
 }
 
+let shown = []; // [{provider, models}] currently offered in the picker
+let untested = false;
+
 function fillModels() {
-  const sel = $("model-select");
-  sel.replaceChildren();
-  let first = null;
-  for (const p of state.providers) {
-    const group = el("optgroup", { label: p.name });
-    for (const m of p.models || []) {
-      group.append(el("option", { value: `${p.id}::${m}`, text: m }));
-      first ??= { providerId: p.id, model: m };
-    }
-    if (group.children.length) sel.append(group);
-  }
-  if (!first) {
-    sel.append(el("option", { value: "", text: "No models yet: open Settings" }));
-    sel.disabled = true;
+  const withModels = state.providers.filter((p) => (p.models || []).length);
+  const ok = withModels.filter(isUsable);
+  untested = !ok.length && withModels.length > 0;
+  shown = (untested ? withModels : ok).map((p) => ({ provider: p, models: p.models }));
+  const btn = $("model-btn");
+  if (!shown.length) {
+    btn.disabled = true;
+    btn.querySelector(".mprov").textContent = "";
+    btn.querySelector(".mname").textContent = withModels.length ? "No tested keys: open Settings" : "No models yet: open Settings";
+    state.active = null;
     return;
   }
-  sel.disabled = false;
+  btn.disabled = false;
   const a = state.active;
-  const valid = a && state.providers.some((p) => p.id === a.providerId && (p.models || []).includes(a.model));
-  state.active = valid ? a : first;
-  sel.value = `${state.active.providerId}::${state.active.model}`;
+  const valid = a && shown.some((g) => g.provider.id === a.providerId && g.models.includes(a.model));
+  if (!valid) state.active = { providerId: shown[0].provider.id, model: shown[0].models[0] };
+  drawModelBtn();
+}
+
+function drawModelBtn() {
+  const p = state.providers.find((x) => x.id === state.active?.providerId);
+  $("model-btn").querySelector(".mprov").textContent = p ? p.name : "";
+  $("model-btn").querySelector(".mname").textContent = state.active?.model || "";
+}
+
+function closeMenu() {
+  $("model-menu").hidden = true;
+  $("model-btn").setAttribute("aria-expanded", "false");
+}
+
+function openMenu() {
+  const menu = $("model-menu");
+  menu.replaceChildren();
+  const total = shown.reduce((n, g) => n + g.models.length, 0);
+  const list = el("div");
+  const draw = () => {
+    list.replaceChildren();
+    const q = (menu.querySelector(".mfilter")?.value || "").trim().toLowerCase();
+    for (const g of shown) {
+      const ms = g.models.filter((m) => !q || m.toLowerCase().includes(q) || g.provider.name.toLowerCase().includes(q));
+      if (!ms.length) continue;
+      list.append(el("div", { class: "mgroup", text: g.provider.name }));
+      for (const m of ms) {
+        const sel = state.active?.providerId === g.provider.id && state.active?.model === m;
+        list.append(
+          el(
+            "button",
+            {
+              class: "mitem",
+              type: "button",
+              role: "option",
+              "aria-selected": String(sel),
+              onclick: () => {
+                state.active = { providerId: g.provider.id, model: m };
+                save({ active: state.active });
+                drawModelBtn();
+                closeMenu();
+              },
+            },
+            el("span", { class: "tick", text: sel ? "\u2713" : "" }),
+            el("span", { class: "mid", text: m })
+          )
+        );
+      }
+    }
+  };
+  if (total > 8) {
+    const f = el("input", { class: "mfilter", type: "text", placeholder: "Filter models" });
+    f.addEventListener("input", draw);
+    menu.append(f);
+  }
+  if (untested) menu.append(el("div", { class: "mnote", text: "Keys not tested yet, so every provider is listed. Test them in Settings to keep only working ones." }));
+  menu.append(list, el("button", { class: "mmanage", type: "button", text: "Manage providers and models", onclick: () => api.runtime.openOptionsPage() }));
+  draw();
+  menu.hidden = false;
+  $("model-btn").setAttribute("aria-expanded", "true");
+  menu.querySelector(".mfilter")?.focus();
+}
+
+// Quietly test any provider whose key has not been checked with its current settings.
+async function backgroundTests() {
+  for (const p of state.providers) {
+    if (isUsable(p) || (p.keyStatus && p.keyStatus.sig === keySig(p))) continue;
+    try {
+      if (!p.baseUrl || !(await api.permissions.contains({ origins: [originPattern(p.baseUrl)] }))) continue;
+      await api.runtime.sendMessage({ type: "test-key", id: p.id });
+    } catch {
+      /* the next settings change or visit retries */
+    }
+  }
 }
 
 function syncPageChip() {
@@ -329,7 +405,7 @@ function setSendState(streaming) {
 }
 
 function emptyState() {
-  const hasModels = !$("model-select").disabled;
+  const hasModels = !$("model-btn").disabled;
   if (!hasModels) {
     return el(
       "div",
@@ -393,7 +469,7 @@ function messageEl(m, index) {
     body.classList.add("cursor");
     streamingBody = body;
   } else {
-    if (m.usage) wrap.append(el("div", { class: "usage", text: usageText(m.usage) }));
+    if (m.usage) wrap.append(el("div", { class: "usage", text: usageText(m.usage), title: "Reported by the provider. Sent covers your question, the chat so far, your standing instructions and the page text. Received is the reply." }));
     if (!isLast) {
       wrap.append(
         el("div", { class: "actions" }, el("button", { text: "Copy", onclick: (e) => copy(buildCopy(m, false), e.currentTarget) }))

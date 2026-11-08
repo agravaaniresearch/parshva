@@ -39,6 +39,7 @@ export async function addUsage(providerName, model, input, output) {
   u.requests += 1;
   u.input += input || 0;
   u.output += output || 0;
+  u.first = u.first || Date.now();
   u.last = Date.now();
   usage[key] = u;
   await api.storage.local.set({ usage });
@@ -53,4 +54,20 @@ export function newProvider(preset) {
     apiKey: "",
     models: [],
   };
+}
+
+// Run a key test for one provider and store the result on it. Used by the background page.
+export async function runKeyTest(id, tester, sigFn) {
+  const { providers = [] } = await api.storage.local.get("providers");
+  const p = providers.find((x) => x.id === id);
+  if (!p) return null;
+  const r = await tester(p);
+  const status = { state: r.state, message: r.message, at: Date.now(), sig: sigFn(p) };
+  const fresh = (await api.storage.local.get("providers")).providers || [];
+  const target = fresh.find((x) => x.id === id);
+  if (target && sigFn(target) === status.sig) {
+    target.keyStatus = status;
+    await api.storage.local.set({ providers: fresh });
+  }
+  return status;
 }

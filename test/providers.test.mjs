@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { buildChatRequest, parseSSE, extractDelta, streamChat, listModels, originPattern, estimateTokens, extractUsage } from "../extension/lib/providers.js";
+import { buildChatRequest, parseSSE, extractDelta, streamChat, listModels, originPattern, estimateTokens, extractUsage, testKey, keySig, isUsable } from "../extension/lib/providers.js";
 
 const openai = { kind: "openai", baseUrl: "http://127.0.0.1:0/v1/", apiKey: "k" };
 const claude = { kind: "anthropic", baseUrl: "https://api.anthropic.com/v1", apiKey: "sk" };
@@ -237,4 +237,36 @@ test("end to end: usage reported, and retry without stream_options on 400", asyn
       assert.equal(u.output, 1);
     }
   );
+});
+
+const fakeFetch = (status, body = "{}") => async () => new Response(body, { status });
+
+test("testKey classifies ok / invalid / unverified / network / error", async () => {
+  assert.equal((await testKey(openai, fakeFetch(200))).state, "ok");
+  assert.equal((await testKey(openai, fakeFetch(401, '{"error":{"message":"bad key"}}'))).state, "invalid");
+  assert.equal((await testKey(openai, fakeFetch(403))).state, "invalid");
+  assert.equal((await testKey(openai, fakeFetch(404))).state, "unverified");
+  assert.equal((await testKey(openai, fakeFetch(429))).state, "ok");
+  assert.equal((await testKey(openai, fakeFetch(500))).state, "error");
+  const down = await testKey(openai, async () => { throw new TypeError("fetch failed"); });
+  assert.equal(down.state, "network");
+});
+
+test("testKey hits the Anthropic models endpoint with its headers", async () => {
+  let seen;
+  await testKey(claude, async (u, init) => { seen = { u, h: init.headers }; return new Response("{}", { status: 200 }); });
+  assert.match(seen.u, /\/v1\/models/);
+  assert.equal(seen.h["x-api-key"], "sk");
+});
+
+test("isUsable needs a passing result for the current key and URL", () => {
+  const p = { ...openai };
+  assert.equal(isUsable(p), false);
+  p.keyStatus = { state: "ok", sig: keySig(p) };
+  assert.equal(isUsable(p), true);
+  p.apiKey = "changed";
+  assert.equal(isUsable(p), false);
+  p.apiKey = "k";
+  p.keyStatus = { state: "invalid", sig: keySig(p) };
+  assert.equal(isUsable(p), false);
 });

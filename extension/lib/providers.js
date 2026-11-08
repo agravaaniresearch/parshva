@@ -231,3 +231,38 @@ export async function listModels(provider, fetchImpl = fetch) {
     .filter(Boolean)
     .sort();
 }
+
+// Fingerprint of the settings a key test applies to, so editing the key or URL marks the result stale.
+export function keySig(provider) {
+  const str = `${provider.kind}|${trimSlash(provider.baseUrl || "")}|${provider.apiKey || ""}`;
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
+// Calls the provider's model-list endpoint. Returns { state, message } where state is
+// ok | invalid | unverified | network | error.
+export async function testKey(provider, fetchImpl = fetch) {
+  const url =
+    provider.kind === "anthropic"
+      ? `${anthropicBase(provider.baseUrl)}/v1/models?limit=1`
+      : `${trimSlash(provider.baseUrl)}/models`;
+  let res;
+  try {
+    res = await fetchImpl(url, { headers: authHeaders(provider) });
+  } catch (e) {
+    return { state: "network", message: "Could not reach the server. Check the base URL and your connection." };
+  }
+  if (res.ok) return { state: "ok", message: "Key accepted." };
+  const detail = await describeError(res);
+  if (res.status === 401 || res.status === 403) return { state: "invalid", message: `Key rejected (${detail})` };
+  if (res.status === 404 || res.status === 405) return { state: "unverified", message: "This server has no model-list endpoint, so the key could not be checked." };
+  if (res.status === 429) return { state: "ok", message: "Key accepted, but the provider is rate limiting right now." };
+  return { state: "error", message: detail };
+}
+
+// Providers shown in the sidebar picker: key tested OK (or unverifiable) with the current settings.
+export function isUsable(p) {
+  const k = p.keyStatus;
+  return !!k && (k.state === "ok" || k.state === "unverified") && k.sig === keySig(p);
+}
