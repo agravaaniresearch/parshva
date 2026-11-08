@@ -463,3 +463,21 @@
 .source .src-url { margin-top: 3px; }
 .msg.assistant .md { line-height: 1.6; padding-top: 2px; }
 .msg.assistant .usage { margin-top: 10px; }
+
+/* v1.0.1 */
+.modes { display: flex; gap: 8px; padding: 0 8px 6px; }
+.modebtn { flex: 1; padding: 8px 10px; border: 1.5px solid var(--accent); border-radius: 10px; background: none; color: var(--accent); font-weight: 700; }
+.modebtn:hover:not(:disabled) { background: var(--accent); color: var(--accent-text); }
+.modebtn:disabled { opacity: .5; cursor: default; }
+.modebtn.last { background: var(--accent); color: var(--accent-text); }
+.fmt { display: inline-flex; border: 1px solid var(--field); border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
+.fmt button { padding: 0 12px; border: 0; background: none; color: var(--muted); height: 100%; min-height: 36px; }
+.fmt button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.arow:last-child .fmt { flex: 1; }
+.arow:last-child .fmt button { flex: 1; }
+.arow:last-child .ghost-btn { flex: 0 1 auto; }
+
+.arow:last-child .fmt, .arow:last-child .fmt button { flex: initial; }
+.arow .fmt { flex: 1; }
+.arow .fmt button { flex: 1; }
+.arow .ghost-btn.clear { flex: 1; }

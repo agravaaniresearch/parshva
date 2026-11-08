@@ -36,6 +36,11 @@
       <button id="btn-page" class="chip" aria-pressed="false" title="Send the current page's text along with your message">Page</button>
     </div>
 
+    <div class="modes">
+      <button id="btn-summary" class="modebtn" type="button" title="A short, token-efficient summary of this page">Summarise</button>
+      <button id="btn-context" class="modebtn" type="button" title="The situation, background, actors and evidence behind this page">Context</button>
+    </div>
+
     <div id="pagebar" class="pagebar" hidden></div>
 
     <main id="messages" aria-live="polite"></main>
@@ -59,8 +64,13 @@
         <button id="btn-plain" class="ghost-btn" type="button"><span class="lbl">Plain text</span></button>
       </div>
       <div class="arow">
-        <button id="btn-list" class="ghost-btn" type="button" title="Show this answer as a bullet list (no extra tokens used)"><span class="lbl">List format</span></button>
+        <div class="fmt" role="group" aria-label="Answer format" title="Applies to every answer and is remembered">
+          <button id="fmt-paragraph" type="button" aria-pressed="false">Paragraph</button>
+          <button id="fmt-list" type="button" aria-pressed="true">List</button>
+        </div>
         <button id="btn-retry" class="ghost-btn" type="button" title="Ask again with the same question"><span class="ico"></span><span class="lbl">Retry</span></button>
+      </div>
+      <div class="arow">
         <button id="btn-clear" class="ghost-btn clear" type="button" title="Remove this answer and its question from the chat"><span class="lbl">Clear summary</span></button>
       </div>
     </div>

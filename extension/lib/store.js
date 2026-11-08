@@ -1,3 +1,5 @@
+import { DEFAULT_PROMPTS } from "./prompts.js";
+
 export const api = globalThis.browser ?? globalThis.chrome;
 
 export const DEFAULT_SYSTEM =
@@ -25,11 +27,28 @@ export async function getState() {
     settings: {},
     conversations: [],
   });
-  s.settings = { systemPrompt: DEFAULT_SYSTEM, includePage: false, theme: "auto", ...s.settings };
+  const raw = s.settings || {};
+  const old = raw.systemPrompt && raw.systemPrompt !== DEFAULT_SYSTEM ? raw.systemPrompt : null;
+  s.settings = { includePage: false, theme: "auto", format: "list", ...raw };
+  // Earlier versions stored one prompt; it becomes the Context prompt.
+  s.settings.prompts = {
+    context: raw.prompts?.context ?? old ?? DEFAULT_PROMPTS.context,
+    summary: raw.prompts?.summary ?? DEFAULT_PROMPTS.summary,
+    ask: raw.prompts?.ask ?? DEFAULT_PROMPTS.ask,
+  };
   return s;
 }
 
 export const save = (obj) => api.storage.local.set(obj);
+
+// Changes only the given settings keys, merged into what is stored right now. Writing a whole in-memory
+// settings object from a page that has been open a while would overwrite changes made elsewhere.
+export async function patchSettings(patch) {
+  const { settings = {} } = await api.storage.local.get("settings");
+  const next = { ...settings, ...patch };
+  await api.storage.local.set({ settings: next });
+  return patch;
+}
 
 // Running totals of provider-reported token usage, per provider and model.
 export async function addUsage(providerName, model, input, output) {
@@ -42,7 +61,15 @@ export async function addUsage(providerName, model, input, output) {
   u.first = u.first || Date.now();
   u.last = Date.now();
   usage[key] = u;
-  await api.storage.local.set({ usage });
+  // Per-day totals (last 60 days) for the usage chart.
+  const { usageDaily = {} } = await api.storage.local.get("usageDaily");
+  const day = new Date().toISOString().slice(0, 10);
+  const d = usageDaily[day] || { input: 0, output: 0 };
+  d.input += input || 0;
+  d.output += output || 0;
+  usageDaily[day] = d;
+  for (const k of Object.keys(usageDaily).sort().slice(0, -60)) delete usageDaily[k];
+  await api.storage.local.set({ usage, usageDaily });
 }
 
 export function newProvider(preset) {

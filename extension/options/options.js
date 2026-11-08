@@ -1,4 +1,5 @@
-import { api, getState, save, newProvider, PRESETS, applyTheme } from "../lib/store.js";
+import { api, getState, save, newProvider, PRESETS, applyTheme, patchSettings } from "../lib/store.js";
+import { DEFAULT_PROMPTS } from "../lib/prompts.js";
 import { listModels, originPattern, keySig } from "../lib/providers.js";
 
 const $ = (id) => document.getElementById(id);
@@ -260,7 +261,21 @@ function render() {
 
 async function init() {
   state = await getState();
-  $("system").value = state.settings.systemPrompt;
+  for (const k of ["summary", "context", "ask"]) $("p-" + k).value = state.settings.prompts[k];
+  for (const b of document.querySelectorAll("[data-reset]")) {
+    b.onclick = (e) => {
+      e.preventDefault();
+      $("p-" + b.dataset.reset).value = DEFAULT_PROMPTS[b.dataset.reset];
+    };
+  }
+  for (const r of document.querySelectorAll('input[name="format"]')) {
+    r.checked = r.value === state.settings.format;
+    r.onchange = async () => {
+      state.settings.format = r.value;
+      await patchSettings({ format: r.value });
+      notify("ok", `Answer format: ${r.value === "list" ? "List" : "Paragraph"}`, "Used for new answers and shown for all answers in the sidebar.");
+    };
+  }
   const presets = $("presets");
   for (const preset of PRESETS) {
     presets.append(
@@ -276,10 +291,12 @@ async function init() {
     );
   }
   $("save-settings").onclick = async () => {
-    state.settings.systemPrompt = $("system").value.trim();
-    await save({ settings: state.settings });
+    const prompts = {};
+    for (const k of ["summary", "context", "ask"]) prompts[k] = $("p-" + k).value.trim() || DEFAULT_PROMPTS[k];
+    state.settings.prompts = prompts;
+    await patchSettings({ prompts });
     $("settings-status").textContent = "Saved.";
-    notify("ok", "System prompt saved", "It applies to your next message.");
+    notify("ok", "Prompts saved", "They are used from your next Summarise, Context or typed question.");
   };
   applyTheme(state.settings.theme);
   for (const r of document.querySelectorAll('input[name="theme"]')) {
@@ -287,7 +304,7 @@ async function init() {
     r.onchange = async () => {
       state.settings.theme = r.value;
       applyTheme(r.value);
-      await save({ settings: state.settings });
+      await patchSettings({ theme: r.value });
       notify("ok", `Theme: ${r.value === "auto" ? "Auto" : r.value === "light" ? "Light" : "Dark"}`, r.value === "auto" ? "Following your system setting." : "Applied to Settings and the sidebar.");
     };
   }
@@ -296,14 +313,72 @@ async function init() {
   render();
   renderUsage();
   $("reset-usage").onclick = async () => {
-    await api.storage.local.set({ usage: {} });
+    await api.storage.local.set({ usage: {}, usageDaily: {} });
     renderUsage();
   };
-  api.storage.onChanged.addListener((c) => c.usage && renderUsage());
+  api.storage.onChanged.addListener((c) => {
+    if (c.usage || c.usageDaily) renderUsage();
+    if (c.settings?.newValue) {
+      const n = c.settings.newValue;
+      for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === (n.theme || "auto");
+      for (const r of document.querySelectorAll('input[name="format"]')) r.checked = r.value === (n.format || "list");
+      applyTheme(n.theme || "auto");
+    }
+  });
+}
+
+const nf = (v) => Number(v || 0).toLocaleString();
+const compact = (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + "k" : String(v));
+
+// Bar charts built from plain elements: tokens per day (last 14 days) and sent vs received per model.
+function renderCharts(usage, daily) {
+  const box = $("usage-charts");
+  box.replaceChildren();
+  if (!Object.keys(usage).length) return;
+  const legend = el("div", { class: "legend2" }, el("span", { class: "sw sent" }), "Sent", el("span", { class: "sw recv" }), "Received");
+
+  // per day
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    days.push({ key, d, v: daily[key] || { input: 0, output: 0 } });
+  }
+  const dmax = Math.max(1, ...days.map((x) => x.v.input + x.v.output));
+  const cols = el("div", { class: "cols" });
+  for (const x of days) {
+    const tot = x.v.input + x.v.output;
+    const stack = el("div", { class: "stack", title: `${x.d.toLocaleDateString(undefined, { day: "numeric", month: "short" })}: ${nf(x.v.input)} sent, ${nf(x.v.output)} received` });
+    stack.append(el("div", { class: "seg-recv", style: `height:${(x.v.output / dmax) * 100}%` }), el("div", { class: "seg-sent", style: `height:${(x.v.input / dmax) * 100}%` }));
+    cols.append(el("div", { class: "col" }, el("div", { class: "cval", text: tot ? compact(tot) : "" }), stack, el("div", { class: "clab", text: String(x.d.getDate()) })));
+  }
+  const hasDaily = days.some((x) => x.v.input || x.v.output);
+  box.append(
+    el("div", { class: "chart" }, el("div", { class: "chead" }, el("strong", { text: "Tokens per day, last 14 days" }), legend),
+      hasDaily ? cols : el("p", { class: "status", text: "Daily bars start filling from your next reply." }))
+  );
+
+  // per model
+  const rows = Object.entries(usage).map(([k, u]) => ({ k: k.replace("::", " / "), i: u.input || 0, o: u.output || 0 })).sort((a, b) => b.i + b.o - (a.i + a.o)).slice(0, 8);
+  const mmax = Math.max(1, ...rows.map((r) => r.i + r.o));
+  const bars = el("div", { class: "hbars" });
+  for (const r of rows) {
+    bars.append(
+      el("div", { class: "hrow" },
+        el("div", { class: "hlab", text: r.k, title: r.k }),
+        el("div", { class: "htrack", title: `${nf(r.i)} sent, ${nf(r.o)} received` },
+          el("div", { class: "seg-sent", style: `width:${(r.i / mmax) * 100}%` }),
+          el("div", { class: "seg-recv", style: `width:${(r.o / mmax) * 100}%` })),
+        el("div", { class: "hval", text: compact(r.i + r.o) }))
+    );
+  }
+  box.append(el("div", { class: "chart" }, el("div", { class: "chead" }, el("strong", { text: "Tokens by model" }), legend.cloneNode(true)), bars));
 }
 
 async function renderUsage() {
-  const { usage = {} } = await api.storage.local.get("usage");
+  const { usage, usageDaily } = await api.storage.local.get({ usage: {}, usageDaily: {} });
+  renderCharts(usage, usageDaily);
   const box = $("usage");
   box.replaceChildren();
   $("usage-since").textContent = "";

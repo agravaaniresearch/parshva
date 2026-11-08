@@ -33,13 +33,30 @@
     <h3>Add a provider</h3>
     <div id="presets" class="presets"></div>
 
-    <h2>Behaviour</h2>
+    <h2>Prompts</h2>
+    <p class="lede">The Summarise and Context buttons at the top of the sidebar each use their own prompt. Typed questions use the Ask prompt. Edit any of them, then Save. The format line (paragraphs or list) is added automatically from the choice in the sidebar, so do not describe the format here.</p>
     <label class="field">
-      <span>System prompt</span>
-      <textarea id="system" rows="4"></textarea>
+      <span>Summarise prompt <button type="button" class="linkbtn" data-reset="summary">Reset to default</button></span>
+      <textarea id="p-summary" rows="5"></textarea>
     </label>
+    <label class="field">
+      <span>Context prompt <button type="button" class="linkbtn" data-reset="context">Reset to default</button></span>
+      <textarea id="p-context" rows="14"></textarea>
+    </label>
+    <label class="field">
+      <span>Ask prompt (typed questions) <button type="button" class="linkbtn" data-reset="ask">Reset to default</button></span>
+      <textarea id="p-ask" rows="4"></textarea>
+    </label>
+    <div class="field">
+      <span>Answer format</span>
+      <div class="seg" role="radiogroup" aria-label="Answer format">
+        <label><input type="radio" name="format" value="paragraph"><span>Paragraph</span></label>
+        <label><input type="radio" name="format" value="list"><span>List</span></label>
+      </div>
+      <small>Remembered across sessions. The sidebar has the same switch.</small>
+    </div>
     <div class="row">
-      <button id="save-settings" class="primary">Save</button>
+      <button id="save-settings" class="primary">Save prompts</button>
       <span id="settings-status" class="status" role="status"></span>
     </div>
 
@@ -50,6 +67,7 @@
       <li><strong>Received</strong> is the reply. Many providers charge more for received tokens than for sent ones.</li>
       <li>Counts come from the provider after each reply, so they are exact, but they are not money. Credit balances cannot be read with an API key, so check those on the provider's billing page.</li>
     </ul>
+    <div id="usage-charts"></div>
     <div id="usage"></div>
     <div class="row">
       <span id="usage-since" class="status"></span>

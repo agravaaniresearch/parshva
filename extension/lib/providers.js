@@ -29,10 +29,10 @@ function authHeaders(provider) {
   return provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {};
 }
 
-export function buildChatRequest(provider, model, messages, system, { includeUsage = true } = {}) {
+export function buildChatRequest(provider, model, messages, system, { includeUsage = true, maxTokens = 8192 } = {}) {
   const clean = messages.map((m) => ({ role: m.role, content: m.content }));
   if (provider.kind === "anthropic") {
-    const body = { model, max_tokens: 8192, stream: true, messages: clean };
+    const body = { model, max_tokens: maxTokens, stream: true, messages: clean };
     if (system) body.system = system;
     return {
       url: `${anthropicBase(provider.baseUrl)}/v1/messages`,
@@ -185,9 +185,9 @@ async function describeError(res) {
   return `${res.status} ${res.statusText}${msg ? `: ${msg}` : ""}`;
 }
 
-export async function* streamChat({ provider, model, messages, system, signal, onUsage, fetchImpl = fetch }) {
+export async function* streamChat({ provider, model, messages, system, signal, onUsage, maxTokens, fetchImpl = fetch }) {
   const post = (includeUsage) => {
-    const req = buildChatRequest(provider, model, messages, system, { includeUsage });
+    const req = buildChatRequest(provider, model, messages, system, { includeUsage, maxTokens });
     return fetchImpl(req.url, {
       method: "POST",
       headers: req.headers,

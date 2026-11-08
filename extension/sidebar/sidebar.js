@@ -1,4 +1,5 @@
-import { api, getState, save, addUsage, applyTheme } from "../lib/store.js";
+import { api, getState, save, addUsage, applyTheme, patchSettings } from "../lib/store.js";
+import { systemFor, MODES } from "../lib/prompts.js";
 import { streamChat, estimateTokens, isUsable, keySig, originPattern } from "../lib/providers.js";
 import { renderMarkdown, setHTML, mdToPlain, toListFormat } from "../lib/markdown.js";
 
@@ -71,6 +72,7 @@ async function init() {
   state = await getState();
   applyTheme(state.settings.theme);
   drawTheme();
+  drawFormat();
   const win = await api.windows.getCurrent();
   myWindowId = win.id;
   setHTML($("btn-send"), SEND_ICON);
@@ -93,10 +95,17 @@ async function init() {
   });
   api.storage.onChanged.addListener((changes) => {
     if (changes.pending?.newValue) consumePending();
-    if (changes.settings?.newValue && changes.settings.newValue.theme !== state.settings.theme) {
-      state.settings.theme = changes.settings.newValue.theme || "auto";
-      applyTheme(state.settings.theme);
-      drawTheme();
+    if (changes.settings) {
+      // Settings can change in the options page while the sidebar stays open: always take the stored values.
+      getState().then((s) => {
+        state.settings = s.settings;
+        applyTheme(state.settings.theme);
+        drawTheme();
+        drawFormat();
+        syncPageChip();
+        renderPageBar();
+        if (!controller) renderAll();
+      });
     }
     if (changes.providers || changes.active) {
       getState().then((s) => {
@@ -114,10 +123,13 @@ function bind() {
     state.settings.theme = THEME_NEXT[state.settings.theme || "auto"];
     applyTheme(state.settings.theme);
     drawTheme();
-    await save({ settings: state.settings });
+    await patchSettings({ theme: state.settings.theme });
     toast(`Theme: ${THEME_LABEL[state.settings.theme]}`);
   };
-  $("btn-list").onclick = toggleList;
+  $("fmt-paragraph").onclick = () => setFormat("paragraph");
+  $("fmt-list").onclick = () => setFormat("list");
+  $("btn-summary").onclick = () => runMode("summary");
+  $("btn-context").onclick = () => runMode("context");
   $("btn-clear").onclick = clearSummary;
   $("history-search").addEventListener("input", renderHistory);
   $("btn-settings").onclick = () => api.runtime.openOptionsPage();
@@ -210,16 +222,38 @@ async function clearSummary() {
   $("input").focus();
 }
 
-async function toggleList() {
-  const m = conv.messages.at(-1);
-  if (!m || m.role !== "assistant" || controller) return;
-  m.view = m.view === "list" ? null : "list";
-  await persist(conv, false);
-  renderAll();
+async function setFormat(fmt) {
+  if (state.settings.format === fmt) return;
+  state.settings.format = fmt;
+  await patchSettings({ format: fmt });
+  drawFormat();
+  if (!controller) renderAll();
+}
+
+function drawFormat() {
+  const list = state.settings.format !== "paragraph";
+  $("fmt-list").setAttribute("aria-pressed", String(list));
+  $("fmt-paragraph").setAttribute("aria-pressed", String(!list));
 }
 
 function shownContent(m) {
-  return m.view === "list" ? toListFormat(m.content) : m.content;
+  return state.settings.format !== "paragraph" ? toListFormat(m.content) : m.content;
+}
+
+// Summarise / Context buttons: switch the page on if needed, then run that mode on the current page.
+async function runMode(mode) {
+  if (controller) return;
+  if (!state.active) return showNotice("Add a provider and model in Settings first.");
+  if (!state.settings.includePage) {
+    // permissions.request has to be the first await here to keep the click's user gesture.
+    const ok = await api.permissions.request({ origins: ["<all_urls>"] });
+    if (!ok) return showNotice("Page access was not granted, so the page text cannot be read.");
+    state.settings.includePage = true;
+    await patchSettings({ includePage: true });
+    syncPageChip();
+    refreshEstimate();
+  }
+  await submit(MODES[mode].message, mode);
 }
 
 function autosize() {
@@ -335,7 +369,7 @@ async function togglePage() {
     if (!ok) return showNotice("Page access was not granted, so the page text cannot be sent.");
   }
   state.settings.includePage = turningOn;
-  await save({ settings: state.settings });
+  await patchSettings({ includePage: turningOn });
   syncPageChip();
   hideNotice();
   renderPageBar();
@@ -408,7 +442,7 @@ async function refreshEstimate() {
     if (seq !== estSeq) return;
     const text = ctx.text.slice(0, MAX_PAGE_CHARS);
     page.chars = text.length;
-    page.tokens = estimateTokens(text) + estimateTokens(state.settings.systemPrompt || "");
+    page.tokens = estimateTokens(text) + estimateTokens(state.settings.prompts?.context || "");
     page.error = null;
   } catch (e) {
     if (seq !== estSeq) return;
@@ -489,7 +523,11 @@ function renderAll() {
 function updateActionBar() {
   const last = conv.messages.at(-1);
   $("actionbar").hidden = !(last && last.role === "assistant" && !controller);
-  $("btn-list").querySelector(".lbl").textContent = last?.view === "list" ? "Paragraphs" : "List format";
+  drawFormat();
+  for (const [id, m] of [["btn-summary", "summary"], ["btn-context", "context"]]) {
+    $(id).disabled = !!controller;
+    $(id).classList.toggle("last", !controller && last?.mode === m);
+  }
 }
 
 function setSendState(streaming) {
@@ -509,10 +547,6 @@ function emptyState() {
       el("button", { class: "primary", text: "Open settings", onclick: () => api.runtime.openOptionsPage() })
     );
   }
-  const ask = (prompt) => async () => {
-    if (!state.settings.includePage) await togglePage();
-    if (state.settings.includePage) submit(prompt);
-  };
   return el(
     "div",
     { class: "empty" },
@@ -521,8 +555,8 @@ function emptyState() {
     el(
       "div",
       { class: "starters" },
-      el("button", { text: "Summarise this page", onclick: ask("Summarise this page in a few sentences.") }),
-      el("button", { text: "List the key points", onclick: ask("List the key points of this page as short bullets.") })
+      el("button", { text: "Summarise this page", onclick: () => runMode("summary") }),
+      el("button", { text: "Get the context", onclick: () => runMode("context") })
     )
   );
 }
@@ -584,7 +618,7 @@ function decorateCode(root) {
 // What gets copied: the source title and address first, then the answer.
 export function buildCopy(m, plain) {
   const head = m.source ? `Source: ${m.source.title}\n${m.source.url}\n\n` : "";
-  const body = m.view === "list" ? toListFormat(m.content) : m.content;
+  const body = shownContent(m);
   return head + (plain ? mdToPlain(body) : body);
 }
 
@@ -728,11 +762,14 @@ async function persist(c, touch = true) {
 
 /* ---------- sending ---------- */
 
-// Builds the system prompt (with page text when the Page chip is on) and the source record.
-async function withPage() {
-  let system = state.settings.systemPrompt || "";
+// Builds the system prompt for a mode (with the page text when the Page chip is on) and the source record.
+// Settings are read from storage at send time, so a prompt saved in the options page is always the one used.
+async function withPage(mode = "ask") {
+  const settings = (await getState()).settings;
+  state.settings = settings;
+  let system = systemFor(settings, mode);
   let source = null;
-  if (state.settings.includePage) {
+  if (settings.includePage) {
     try {
       const ctx = await getPageContext();
       const body = ctx.text.length > MAX_PAGE_CHARS ? ctx.text.slice(0, MAX_PAGE_CHARS) + "\n[truncated]" : ctx.text;
@@ -746,7 +783,7 @@ async function withPage() {
   return { system, source };
 }
 
-async function submit(preset) {
+async function submit(preset, mode = "ask") {
   const input = $("input");
   const text = (preset ?? input.value).trim();
   if (!text || controller) return;
@@ -755,31 +792,36 @@ async function submit(preset) {
   if (!provider) return showNotice("The selected provider no longer exists.");
 
   hideNotice();
-  const { system, source } = await withPage();
-  conv.messages.push({
+  const { system, source } = await withPage(mode);
+  const msg = {
     role: "user",
     content: text,
     page: source ? (source.selection ? `${source.title} (selection)` : source.title) : null,
-  });
+  };
+  if (mode !== "ask") msg.mode = mode;
+  conv.messages.push(msg);
   if (preset === undefined) {
     input.value = "";
     autosize();
   }
-  await run(provider, system, source);
+  await run(provider, system, source, mode);
 }
 
-async function run(provider, system, source) {
+async function run(provider, system, source, mode = "ask") {
   const target = conv;
   const model = state.active.model;
   const reply = { role: "assistant", content: "" };
   if (source) reply.source = source;
+  if (mode !== "ask") reply.mode = mode;
   target.messages.push(reply);
   const mine = new AbortController();
   controller = mine;
   setSendState(true);
   renderAll();
 
-  const history = target.messages.slice(0, -1);
+  // Summarise and Context send only their own instruction (no earlier chat), which keeps them cheap.
+  const all = target.messages.slice(0, -1);
+  const history = mode === "ask" ? all : all.slice(-1);
   let failed = null;
   let usage = null;
   try {
@@ -788,6 +830,7 @@ async function run(provider, system, source) {
       model,
       messages: history,
       system,
+      maxTokens: MODES[mode].maxTokens,
       signal: mine.signal,
       onUsage: (u) => (usage = u),
     })) {
@@ -826,8 +869,9 @@ async function retry() {
   const provider = state.providers.find((p) => p.id === state.active?.providerId);
   if (!provider) return showNotice("Pick a model first.");
   hideNotice();
-  const { system, source } = await withPage();
-  await run(provider, system, source);
+  const mode = conv.messages.at(-1).mode || "ask";
+  const { system, source } = await withPage(mode);
+  await run(provider, system, source, mode);
 }
 
 init();

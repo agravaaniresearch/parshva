@@ -65,3 +65,10 @@ npx web-ext run --source-dir extension   # launches Firefox with the extension l
 - Settings: large colour-coded notifications, collapsible provider cards (plus Collapse all / Expand all).
 - Theme: Light, Dark or Auto in Settings; the sidebar header button cycles through them.
 - New icon.
+
+## v1.0.1
+
+- Fixed: prompts saved in Settings were not always used. The sidebar kept an old copy of the settings and could overwrite new prompts when you toggled Page or Theme. Settings are now changed key by key and read from storage at every send.
+- Summarise and Context buttons at the top, each with its own editable prompt (plus an Ask prompt for typed questions). They send only their own instruction, not the earlier chat, and cap the reply length on Claude.
+- Paragraph or List is a remembered setting that applies to every answer and is added to the prompt automatically.
+- Usage charts: tokens per day (14 days) and sent vs received by model.
