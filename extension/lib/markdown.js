@@ -185,3 +185,58 @@ export function setHTML(container, html) {
   const doc = new DOMParser().parseFromString(html, "text/html");
   container.replaceChildren(...doc.body.childNodes);
 }
+
+const ABBREV = /(?:\b(?:Dr|Mr|Mrs|Ms|Prof|St|Mt|vs|etc|No|Inc|Ltd|Jr|Sr|Gen|Col|Lt|Sen|Rep|Gov|Fig|approx|e\.g|i\.e)|\b[A-Z](?:\.[A-Z])+|\b[A-Z])\.$/;
+
+function splitSentences(text) {
+  const parts = text.split(/(?<=[.!?])\s+(?=["'(“‘]?[A-Z0-9])/);
+  const out = [];
+  for (const p of parts) {
+    if (out.length && ABBREV.test(out[out.length - 1])) out[out.length - 1] += " " + p;
+    else out.push(p);
+  }
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+// Turns paragraph answers into a bullet list without another model call. A paragraph that starts with a
+// bold label ("**Source:** ...") becomes a bold bullet with its sentences as sub-bullets. Other paragraphs
+// become one bullet per sentence. Headings, lists, tables, quotes and code are left alone.
+export function toListFormat(src) {
+  const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  const out = [];
+  let para = [];
+  let fence = false;
+  const flush = () => {
+    if (!para.length) return;
+    const text = para.join(" ").replace(/\s+/g, " ").trim();
+    para = [];
+    const m = text.match(/^(\*\*[^*]+?\*\*:?|__[^_]+?__:?)\s*(.*)$/);
+    if (m) {
+      const label = m[1].replace(/^__|__$/g, "**");
+      const sents = splitSentences(m[2]);
+      if (sents.length <= 1) out.push(`- ${label} ${m[2]}`.trimEnd());
+      else {
+        out.push(`- ${label}`);
+        for (const s of sents) out.push(`  - ${s}`);
+      }
+    } else {
+      for (const s of splitSentences(text)) out.push(`- ${s}`);
+    }
+  };
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      flush();
+      fence = !fence;
+      out.push(line);
+    } else if (fence) out.push(line);
+    else if (!line.trim()) {
+      flush();
+      if (out.length && out[out.length - 1] !== "") out.push("");
+    } else if (/^\s*([-*+]|\d+[.)])\s|^\s*#{1,6}\s|^\s*>|^\s*\|/.test(line)) {
+      flush();
+      out.push(line);
+    } else para.push(line.trim());
+  }
+  flush();
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}

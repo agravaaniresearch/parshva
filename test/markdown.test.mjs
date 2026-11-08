@@ -66,3 +66,15 @@ test("mdToPlain strips markup and keeps link URLs", () => {
   assert.ok(out.includes("site (https://a.com)"));
   assert.ok(out.includes("one") && out.includes("two"));
 });
+
+import { toListFormat } from "../extension/lib/markdown.js";
+test("toListFormat: labelled paragraphs become nested bullets", () => {
+  const out = toListFormat("**Source:** Reuters, 3 May 2026. It is reporting. Dr. Rao is quoted.\n\n**Trigger:** A single sentence here.");
+  assert.equal(out, "- **Source:**\n  - Reuters, 3 May 2026.\n  - It is reporting.\n  - Dr. Rao is quoted.\n\n- **Trigger:** A single sentence here.");
+});
+test("toListFormat: plain paragraphs split by sentence, lists and code untouched", () => {
+  assert.equal(toListFormat("One. Two! Three?"), "- One.\n- Two!\n- Three?");
+  const keep = "- a\n- b\n\n```\nx. Y. z\n```";
+  assert.equal(toListFormat(keep), keep);
+  assert.equal(toListFormat(""), "");
+});

@@ -1,6 +1,6 @@
-import { api, getState, save, addUsage } from "../lib/store.js";
+import { api, getState, save, addUsage, applyTheme } from "../lib/store.js";
 import { streamChat, estimateTokens, isUsable, keySig, originPattern } from "../lib/providers.js";
-import { renderMarkdown, setHTML, mdToPlain } from "../lib/markdown.js";
+import { renderMarkdown, setHTML, mdToPlain, toListFormat } from "../lib/markdown.js";
 
 const $ = (id) => document.getElementById(id);
 const svg = (inner, size = 18, extra = "") =>
@@ -9,6 +9,13 @@ const SEND_ICON = svg('<path d="M12 19V5M5 12l7-7 7 7"/>');
 const STOP_ICON = svg('<rect x="6" y="6" width="12" height="12" rx="2"/>', 16, "fill");
 const COPY_ICON = svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>');
 const CHECK_ICON = svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+const THEME_ICONS = {
+  auto: svg('<circle cx="12" cy="12" r="8"/><path d="M12 4v16" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>'),
+  light: svg('<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>'),
+  dark: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>'),
+};
+const THEME_NEXT = { auto: "light", light: "dark", dark: "auto" };
+const THEME_LABEL = { auto: "Auto (follows your system)", light: "Light", dark: "Dark" };
 const RETRY_ICON = svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>');
 
 const MAX_PAGE_CHARS = 40000;
@@ -62,6 +69,8 @@ function normUrl(u) {
 
 async function init() {
   state = await getState();
+  applyTheme(state.settings.theme);
+  drawTheme();
   const win = await api.windows.getCurrent();
   myWindowId = win.id;
   setHTML($("btn-send"), SEND_ICON);
@@ -84,6 +93,11 @@ async function init() {
   });
   api.storage.onChanged.addListener((changes) => {
     if (changes.pending?.newValue) consumePending();
+    if (changes.settings?.newValue && changes.settings.newValue.theme !== state.settings.theme) {
+      state.settings.theme = changes.settings.newValue.theme || "auto";
+      applyTheme(state.settings.theme);
+      drawTheme();
+    }
     if (changes.providers || changes.active) {
       getState().then((s) => {
         state = s;
@@ -95,14 +109,17 @@ async function init() {
 }
 
 function bind() {
-  $("btn-new").onclick = () => {
-    if (controller) controller.abort();
-    conv = newConv();
-    convByUrl.delete(page.url);
-    hideNotice();
-    renderAll();
-    $("input").focus();
+  $("btn-new").onclick = newChat;
+  $("btn-theme").onclick = async () => {
+    state.settings.theme = THEME_NEXT[state.settings.theme || "auto"];
+    applyTheme(state.settings.theme);
+    drawTheme();
+    await save({ settings: state.settings });
+    toast(`Theme: ${THEME_LABEL[state.settings.theme]}`);
   };
+  $("btn-list").onclick = toggleList;
+  $("btn-clear").onclick = clearSummary;
+  $("history-search").addEventListener("input", renderHistory);
   $("btn-settings").onclick = () => api.runtime.openOptionsPage();
   $("btn-history").onclick = openHistory;
   $("btn-history-close").onclick = () => ($("history").hidden = true);
@@ -127,6 +144,82 @@ function bind() {
       if (!controller) submit();
     }
   });
+}
+
+function drawTheme() {
+  const t = state.settings.theme || "auto";
+  const b = $("btn-theme");
+  setHTML(b, THEME_ICONS[t]);
+  b.title = `Theme: ${THEME_LABEL[t]}. Click to change.`;
+  b.setAttribute("aria-label", b.title);
+}
+
+let toastTimer = null;
+function toast(text, action) {
+  const t = $("toast");
+  t.replaceChildren(el("span", { text }));
+  if (action) t.append(el("button", { type: "button", text: action.label, onclick: () => { hideToast(); action.fn(); } }));
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, action ? 8000 : 3500);
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  $("toast").hidden = true;
+}
+
+function newChat() {
+  if (controller) controller.abort();
+  const hadChat = conv.messages.length > 0;
+  conv = newConv();
+  convByUrl.delete(page.url);
+  hideNotice();
+  renderAll();
+  $("input").focus();
+  toast(hadChat ? "New chat started. The previous chat is saved in History." : "This is already a new, empty chat.");
+}
+
+function lastExchange() {
+  const msgs = conv.messages;
+  if (!msgs.length || msgs.at(-1).role !== "assistant") return null;
+  let i = msgs.length - 1;
+  while (i > 0 && msgs[i - 1].role === "user") i--;
+  return i; // index where the removable exchange starts (last user messages plus the answer)
+}
+
+async function clearSummary() {
+  if (controller) return;
+  const start = lastExchange();
+  if (start == null) return;
+  const removed = conv.messages.splice(start);
+  const target = conv;
+  if (!target.messages.length) {
+    state.conversations = state.conversations.filter((x) => x.id !== target.id);
+    await save({ conversations: state.conversations });
+  } else await persist(target);
+  renderAll();
+  toast("Summary cleared.", {
+    label: "Undo",
+    fn: async () => {
+      if (conv !== target) return;
+      target.messages.push(...removed);
+      await persist(target);
+      renderAll();
+    },
+  });
+  $("input").focus();
+}
+
+async function toggleList() {
+  const m = conv.messages.at(-1);
+  if (!m || m.role !== "assistant" || controller) return;
+  m.view = m.view === "list" ? null : "list";
+  await persist(conv, false);
+  renderAll();
+}
+
+function shownContent(m) {
+  return m.view === "list" ? toListFormat(m.content) : m.content;
 }
 
 function autosize() {
@@ -396,6 +489,7 @@ function renderAll() {
 function updateActionBar() {
   const last = conv.messages.at(-1);
   $("actionbar").hidden = !(last && last.role === "assistant" && !controller);
+  $("btn-list").querySelector(".lbl").textContent = last?.view === "list" ? "Paragraphs" : "List format";
 }
 
 function setSendState(streaming) {
@@ -461,7 +555,7 @@ function messageEl(m, index) {
   const wrap = el("div", { class: "msg assistant" });
   if (m.source) wrap.append(sourceEl(m.source));
   const body = el("div", { class: "md" });
-  setHTML(body, renderMarkdown(m.content));
+  setHTML(body, renderMarkdown(shownContent(m)));
   decorateCode(body);
   wrap.append(body);
   const isLast = index === conv.messages.length - 1;
@@ -490,7 +584,8 @@ function decorateCode(root) {
 // What gets copied: the source title and address first, then the answer.
 export function buildCopy(m, plain) {
   const head = m.source ? `Source: ${m.source.title}\n${m.source.url}\n\n` : "";
-  return head + (plain ? mdToPlain(m.content) : m.content);
+  const body = m.view === "list" ? toListFormat(m.content) : m.content;
+  return head + (plain ? mdToPlain(body) : body);
 }
 
 async function copy(text, btn) {
@@ -531,57 +626,103 @@ function scheduleStreamRender(msg) {
 
 /* ---------- history ---------- */
 
+function convSources(c) {
+  const seen = new Map();
+  for (const m of c.messages) if (m.source?.url && !seen.has(m.source.url)) seen.set(m.source.url, m.source.title || m.source.url);
+  return [...seen].map(([url, title]) => ({ url, title }));
+}
+
+function dayLabel(t) {
+  const d = new Date(t);
+  const today = new Date();
+  const days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
 function openHistory() {
+  $("history-search").value = "";
+  $("history").hidden = false;
+  renderHistory();
+  $("history-search").focus();
+}
+
+function renderHistory() {
   const list = $("history-list");
   list.replaceChildren();
-  const convs = [...state.conversations].sort((a, b) => b.updated - a.updated);
-  if (!convs.length) list.append(el("li", { class: "none", text: "No saved chats yet." }));
+  const q = $("history-search").value.trim().toLowerCase();
+  const convs = [...state.conversations].sort((a, b) => b.updated - a.updated).filter((c) => {
+    if (!q) return true;
+    const hay = [c.title, ...convSources(c).flatMap((s) => [s.title, s.url]), ...c.messages.map((m) => m.content)].join("\n").toLowerCase();
+    return q.split(/\s+/).every((w) => hay.includes(w));
+  });
+  if (!convs.length) {
+    list.append(el("li", { class: "none", text: q ? "Nothing matches that search." : "No saved chats yet." }));
+    return;
+  }
+  let group = "";
   for (const c of convs) {
+    const g = dayLabel(c.updated);
+    if (g !== group) {
+      group = g;
+      list.append(el("li", { class: "hgroup", text: g }));
+    }
+    const srcs = convSources(c);
+    const urls = el("div", { class: "urls" });
+    for (const s of srcs.slice(0, 2)) urls.append(isWeb(s.url) ? el("a", { href: s.url, target: "_blank", rel: "noopener noreferrer", title: s.url, text: s.url }) : el("span", { class: "more", text: s.url }));
+    if (srcs.length > 2) urls.append(el("div", { class: "more", text: `+${srcs.length - 2} more page${srcs.length - 2 > 1 ? "s" : ""}` }));
     list.append(
       el(
         "li",
-        {},
+        { class: "hitem" },
         el(
-          "button",
-          {
-            class: "open",
-            onclick: () => {
-              if (controller) controller.abort();
-              conv = structuredClone(c);
-              hideNotice();
-              renderAll();
-              $("history").hidden = true;
+          "div",
+          { class: "hmain" },
+          el(
+            "button",
+            {
+              class: "open",
+              onclick: () => {
+                if (controller) controller.abort();
+                conv = structuredClone(c);
+                hideNotice();
+                renderAll();
+                $("history").hidden = true;
+              },
             },
-          },
-          el("span", { class: "t", text: c.title }),
-          el("span", { class: "d", text: new Date(c.updated).toLocaleString() })
+            el("span", { class: "t", text: c.title }),
+            el("span", { class: "d", text: new Date(c.updated).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) + (srcs.length ? "" : "  \u00B7  no page attached") })
+          ),
+          urls
         ),
         el("button", {
           class: "icon",
-          title: "Delete",
+          title: "Delete this chat from History",
           "aria-label": "Delete chat",
-          text: "×",
+          text: "\u00D7",
           onclick: async () => {
             state.conversations = state.conversations.filter((x) => x.id !== c.id);
             await save({ conversations: state.conversations });
             if (conv.id === c.id) conv = newConv();
             renderAll();
-            openHistory();
+            renderHistory();
           },
         })
       )
     );
   }
-  $("history").hidden = false;
 }
 
-async function persist(c) {
+async function persist(c, touch = true) {
   if (!c.messages.length) return;
-  c.updated = Date.now();
+  if (touch) c.updated = Date.now();
+  const src = c.messages.find((m) => m.source)?.source;
   const first = c.messages.find((m) => m.role === "user");
-  c.title = (first?.content || "New chat").replace(/\s+/g, " ").trim().slice(0, 60);
+  c.title = ((src && src.title) || first?.content || "New chat").replace(/\s+/g, " ").trim().slice(0, 80);
   const others = state.conversations.filter((x) => x.id !== c.id);
-  state.conversations = [structuredClone(c), ...others].slice(0, MAX_CONVERSATIONS);
+  const merged = [structuredClone(c), ...others].sort((a, b) => b.updated - a.updated);
+  state.conversations = merged.slice(0, MAX_CONVERSATIONS);
   await save({ conversations: state.conversations });
 }
 

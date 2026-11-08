@@ -25,7 +25,7 @@ export async function getState() {
     settings: {},
     conversations: [],
   });
-  s.settings = { systemPrompt: DEFAULT_SYSTEM, includePage: false, ...s.settings };
+  s.settings = { systemPrompt: DEFAULT_SYSTEM, includePage: false, theme: "auto", ...s.settings };
   return s;
 }
 
@@ -70,4 +70,16 @@ export async function runKeyTest(id, tester, sigFn) {
     await api.storage.local.set({ providers: fresh });
   }
   return status;
+}
+
+// theme: "auto" | "light" | "dark". Cached in localStorage so theme-init.js can apply it before paint.
+export function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+  else root.removeAttribute("data-theme");
+  try {
+    localStorage.setItem("parshva-theme", theme === "light" || theme === "dark" ? theme : "auto");
+  } catch {
+    /* storage unavailable */
+  }
 }

@@ -18,8 +18,29 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* Theme: Auto follows the system; Light and Dark are forced with data-theme on <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #1c1916;
+    --surface: #26221d;
+    --surface-2: #322d26;
+    --text: #ece6dc;
+    --muted: #9a8f80;
+    --border: #36312a;
+    --field: #6a6256;
+    --accent: #e0894a;
+    --accent-text: #1c1916;
+    --code-bg: #14120f;
+    --ok: #9ccb82;
+    --warn: #e3b866;
+    --danger: #f0a39b;
+    --danger-bg: #3a211e;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1c1916;
     --surface: #26221d;
     --surface-2: #322d26;

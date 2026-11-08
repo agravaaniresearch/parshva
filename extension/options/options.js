@@ -1,4 +1,4 @@
-import { api, getState, save, newProvider, PRESETS } from "../lib/store.js";
+import { api, getState, save, newProvider, PRESETS, applyTheme } from "../lib/store.js";
 import { listModels, originPattern, keySig } from "../lib/providers.js";
 
 const $ = (id) => document.getElementById(id);
@@ -16,6 +16,22 @@ function el(tag, props = {}, ...kids) {
   }
   n.append(...kids);
   return n;
+}
+
+let toastTimer = null;
+// Large, colour-coded notification. kind: ok | warn | bad
+function notify(kind, title, msg) {
+  const t = $("toast");
+  const icon = { ok: "\u2713", warn: "!", bad: "\u2717" }[kind] || "i";
+  t.className = "toast " + kind;
+  t.replaceChildren(
+    el("div", { class: "ticon", text: icon }),
+    el("div", { class: "tbody" }, el("strong", { text: title }), el("div", { text: msg || "" })),
+    el("button", { class: "tclose", type: "button", "aria-label": "Dismiss", text: "\u00D7", onclick: () => (t.hidden = true) })
+  );
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), kind === "ok" ? 6000 : 12000);
 }
 
 function field(label, input, hint) {
@@ -140,7 +156,10 @@ function card(p) {
       pull();
       if (!validUrl()) return;
       const ok = await api.permissions.request({ origins: [originPattern(p.baseUrl)] });
-      if (!ok) return say("Permission to reach this server was declined.", true);
+      if (!ok) {
+        notify("bad", "Permission declined", `Parshva needs permission to reach ${p.name} before it can fetch models.`);
+        return say("Permission to reach this server was declined.", true);
+      }
       say("Fetching...");
       try {
         const ids = await listModels(p);
@@ -148,8 +167,10 @@ function card(p) {
         ids.forEach((id) => catalog.add(id));
         drawList();
         say(`${ids.length} fetched, ${fresh} new. Tick the ones to show in the sidebar, then Save.`);
+        notify("ok", `${p.name}: ${ids.length} models fetched`, `${fresh} new. Tick the ones to show in the sidebar, then press Save.`);
       } catch (e) {
         say(e.message, true);
+        notify("bad", `${p.name}: could not fetch models`, e.message);
       }
     },
   });
@@ -161,7 +182,10 @@ function card(p) {
       pull();
       if (!validUrl()) return;
       const ok = await api.permissions.request({ origins: [originPattern(p.baseUrl)] });
-      if (!ok) return say("Permission to reach this server was declined.", true);
+      if (!ok) {
+        notify("bad", "Permission declined", `Parshva needs permission to reach ${p.name} before it can test the key.`);
+        return say("Permission to reach this server was declined.", true);
+      }
       await save({ providers: state.providers });
       badge.className = "badge";
       badge.textContent = "Testing\u2026";
@@ -173,7 +197,11 @@ function card(p) {
       }
       testBtn.disabled = false;
       drawBadge();
-      say(p.keyStatus?.message || "", p.keyStatus?.state === "invalid");
+      const st = p.keyStatus || { state: "error", message: "No result." };
+      say(st.message || "", st.state === "invalid");
+      const kinds = { ok: ["ok", "Key works"], unverified: ["warn", "Key could not be verified"], invalid: ["bad", "Invalid key"], network: ["warn", "Network error"], error: ["warn", "Test failed"] };
+      const [kind, label] = kinds[st.state] || ["warn", "Test failed"];
+      notify(kind, `${p.name}: ${label}`, st.message || "");
     },
   });
 
@@ -188,9 +216,11 @@ function card(p) {
       await save({ providers: state.providers });
       drawBadge();
       say("Saved. Press Test key to check it.");
+      notify("ok", `${p.name} saved`, p.keyStatus ? `${p.models.length} model${p.models.length === 1 ? "" : "s"} shown in the sidebar.` : "Press Test key to check that the key works.");
     },
   });
 
+  const collapseBtn = el("button", { class: "secondary", type: "button", text: "Collapse", onclick: () => (d.open = false) });
   const del = el("button", {
     class: "danger",
     text: "Delete",
@@ -204,7 +234,7 @@ function card(p) {
   const d = el(
     "details",
     { class: "card" },
-    el("summary", {}, dot, el("span", { text: p.name }), el("span", { class: "sub", text: p.baseUrl }), badge),
+    el("summary", {}, el("span", { class: "chev", text: "\u25B8" }), dot, el("span", { text: p.name }), el("span", { class: "sub", text: p.baseUrl }), badge),
     el(
       "div",
       { class: "card-body" },
@@ -213,7 +243,7 @@ function card(p) {
       field("Base URL", url),
       field("API key", keyRow, mask()),
       field("Models", models, "Fetching adds to this list and never removes anything. Tick the models you want in the sidebar picker, such as a stronger one for technical work."),
-      el("div", { class: "row" }, testBtn, fetchBtn, saveBtn, status, del)
+      el("div", { class: "row" }, testBtn, fetchBtn, saveBtn, status, collapseBtn, del)
     )
   );
   if (open.has(p.id)) d.open = true;
@@ -249,7 +279,20 @@ async function init() {
     state.settings.systemPrompt = $("system").value.trim();
     await save({ settings: state.settings });
     $("settings-status").textContent = "Saved.";
+    notify("ok", "System prompt saved", "It applies to your next message.");
   };
+  applyTheme(state.settings.theme);
+  for (const r of document.querySelectorAll('input[name="theme"]')) {
+    r.checked = r.value === (state.settings.theme || "auto");
+    r.onchange = async () => {
+      state.settings.theme = r.value;
+      applyTheme(r.value);
+      await save({ settings: state.settings });
+      notify("ok", `Theme: ${r.value === "auto" ? "Auto" : r.value === "light" ? "Light" : "Dark"}`, r.value === "auto" ? "Following your system setting." : "Applied to Settings and the sidebar.");
+    };
+  }
+  $("collapse-all").onclick = () => document.querySelectorAll("details.card").forEach((d) => (d.open = false));
+  $("expand-all").onclick = () => document.querySelectorAll("details.card").forEach((d) => (d.open = true));
   render();
   renderUsage();
   $("reset-usage").onclick = async () => {

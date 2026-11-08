@@ -55,3 +55,13 @@ npx web-ext run --source-dir extension   # launches Firefox with the extension l
 - Sidebar model picker shows the active provider and model, grouped by provider, listing only providers whose key passed a test (all providers, with a note, until a test has run).
 - Settings: masked keys with Show/Hide, a Test key button and a status badge (works, invalid, network error, could not verify). Tests run in the background page.
 - Clearer Usage table: sent vs received, replies, average sent, last used, grouped by provider.
+
+## v1.0.0
+
+- History lists each chat with its page title and source URLs, grouped by day (newest first), with a search over titles, URLs and text.
+- Answer buttons: Copy, Plain text, List format (bullets, no extra tokens; click again for Paragraphs), Retry and Clear summary (with Undo).
+- A labelled New chat button; the previous chat stays in History.
+- More space between the source card and the answer.
+- Settings: large colour-coded notifications, collapsible provider cards (plus Collapse all / Expand all).
+- Theme: Light, Dark or Auto in Settings; the sidebar header button cycles through them.
+- New icon.

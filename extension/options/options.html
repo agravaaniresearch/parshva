@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Parshva settings</title>
+  <script src="../shared/theme-init.js"></script>
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="options.css">
 </head>
@@ -12,7 +13,21 @@
     <h1>Parshva</h1>
     <p class="lede">Add the providers you want in the sidebar. Keys stay in this browser and are sent only to the provider you add them for.</p>
 
-    <h2>Providers</h2>
+    <h2>Appearance</h2>
+    <div class="seg" role="radiogroup" aria-label="Theme">
+      <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+      <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+      <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
+    </div>
+    <p class="lede small">Auto follows your system setting. The sidebar header also has a button that cycles through the three.</p>
+
+    <div class="h2row">
+      <h2>Providers</h2>
+      <div class="row">
+        <button id="collapse-all" class="secondary" type="button">Collapse all</button>
+        <button id="expand-all" class="secondary" type="button">Expand all</button>
+      </div>
+    </div>
     <div id="providers"></div>
 
     <h3>Add a provider</h3>
@@ -41,6 +56,7 @@
       <button id="reset-usage" class="secondary">Reset counters</button>
     </div>
   </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script type="module" src="options.js"></script>
 </body>
 </html>
