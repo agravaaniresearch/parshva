@@ -1,5 +1,5 @@
 import { api, getState, save, newProvider, PRESETS, applyTheme, patchSettings } from "../lib/store.js";
-import { DEFAULT_PROMPTS } from "../lib/prompts.js";
+import { DEFAULT_PROMPTS, systemFor, TRIGGER } from "../lib/prompts.js";
 import { listModels, originPattern, keySig } from "../lib/providers.js";
 
 const $ = (id) => document.getElementById(id);
@@ -262,10 +262,21 @@ function render() {
 async function init() {
   state = await getState();
   for (const k of ["summary", "context", "ask"]) $("p-" + k).value = state.settings.prompts[k];
+  const drawPreview = (k) => {
+    const sys = systemFor({ prompts: { [k]: $("p-" + k).value }, format: state.settings.format }, k);
+    const user = k === "ask" ? "(your typed question)" : TRIGGER;
+    $("pv-" + k).textContent = `SYSTEM:\n${sys}\n\n[the page title, URL and page text are added here when Page is on]\n\nUSER:\n${user}`;
+  };
+  window.__drawPreviews = () => ["summary", "context", "ask"].forEach(drawPreview);
+  for (const k of ["summary", "context", "ask"]) {
+    $("p-" + k).addEventListener("input", () => drawPreview(k));
+    drawPreview(k);
+  }
   for (const b of document.querySelectorAll("[data-reset]")) {
     b.onclick = (e) => {
       e.preventDefault();
       $("p-" + b.dataset.reset).value = DEFAULT_PROMPTS[b.dataset.reset];
+      $("p-" + b.dataset.reset).dispatchEvent(new Event("input"));
     };
   }
   for (const r of document.querySelectorAll('input[name="format"]')) {
@@ -273,6 +284,7 @@ async function init() {
     r.onchange = async () => {
       state.settings.format = r.value;
       await patchSettings({ format: r.value });
+      window.__drawPreviews();
       notify("ok", `Answer format: ${r.value === "list" ? "List" : "Paragraph"}`, "Used for new answers and shown for all answers in the sidebar.");
     };
   }
@@ -322,6 +334,8 @@ async function init() {
       const n = c.settings.newValue;
       for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === (n.theme || "auto");
       for (const r of document.querySelectorAll('input[name="format"]')) r.checked = r.value === (n.format || "list");
+      state.settings.format = n.format || "list";
+      window.__drawPreviews();
       applyTheme(n.theme || "auto");
     }
   });

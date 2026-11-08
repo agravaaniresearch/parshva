@@ -72,3 +72,9 @@ npx web-ext run --source-dir extension   # launches Firefox with the extension l
 - Summarise and Context buttons at the top, each with its own editable prompt (plus an Ask prompt for typed questions). They send only their own instruction, not the earlier chat, and cap the reply length on Claude.
 - Paragraph or List is a remembered setting that applies to every answer and is added to the prompt automatically.
 - Usage charts: tokens per day (14 days) and sent vs received by model.
+
+## v1.0.2
+
+- Prompts: what you save in Settings is now the entire system prompt. The code no longer appends hidden format text; the only substitution is the `{format}` placeholder. The user turn sent by Summarise and Context is a neutral line that carries no instructions.
+- Settings shows "Show exactly what is sent" under each prompt, and each answer is tagged with the prompt used (default or yours).
+- Context default is longer (about 500 to 700 words, larger reply cap); Summarise stays at five short points. Unedited earlier defaults, and the old 300-word prompt, are upgraded automatically; edited prompts are kept.

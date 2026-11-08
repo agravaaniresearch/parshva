@@ -1,5 +1,5 @@
 import { api, getState, save, addUsage, applyTheme, patchSettings } from "../lib/store.js";
-import { systemFor, MODES } from "../lib/prompts.js";
+import { systemFor, MODES, isDefaultPrompt } from "../lib/prompts.js";
 import { streamChat, estimateTokens, isUsable, keySig, originPattern } from "../lib/providers.js";
 import { renderMarkdown, setHTML, mdToPlain, toListFormat } from "../lib/markdown.js";
 
@@ -575,6 +575,12 @@ function sourceEl(s) {
   );
 }
 
+function promptText(m) {
+  if (!m.prompt) return "";
+  const name = { summary: "Summarise", context: "Context", ask: "Ask" }[m.prompt.mode] || "Ask";
+  return `${name} prompt: ${m.prompt.edited ? "yours" : "default"}`;
+}
+
 function usageText(u) {
   return `${fmt(u.input)} in · ${fmt(u.output)} out tokens`;
 }
@@ -583,7 +589,7 @@ function messageEl(m, index) {
   if (m.role === "user") {
     const wrap = el("div", { class: "msg user" });
     if (m.page) wrap.append(el("div", { class: "pagetag", text: `Page: ${m.page}` }));
-    wrap.append(el("div", { class: "bubble", text: m.content }));
+    wrap.append(el("div", { class: "bubble", text: m.label || m.content }));
     return wrap;
   }
   const wrap = el("div", { class: "msg assistant" });
@@ -597,7 +603,7 @@ function messageEl(m, index) {
     body.classList.add("cursor");
     streamingBody = body;
   } else {
-    if (m.usage) wrap.append(el("div", { class: "usage", text: usageText(m.usage), title: "Reported by the provider. Sent covers your question, the chat so far, your standing instructions and the page text. Received is the reply." }));
+    if (m.usage || m.prompt) wrap.append(el("div", { class: "usage", text: [promptText(m), m.usage ? usageText(m.usage) : ""].filter(Boolean).join("  \u00B7  "), title: "Reported by the provider. Sent covers your question, the chat so far, your standing instructions and the page text. Received is the reply." }));
     if (!isLast) {
       wrap.append(
         el("div", { class: "actions" }, el("button", { text: "Copy", onclick: (e) => copy(buildCopy(m, false), e.currentTarget) }))
@@ -753,7 +759,7 @@ async function persist(c, touch = true) {
   if (touch) c.updated = Date.now();
   const src = c.messages.find((m) => m.source)?.source;
   const first = c.messages.find((m) => m.role === "user");
-  c.title = ((src && src.title) || first?.content || "New chat").replace(/\s+/g, " ").trim().slice(0, 80);
+  c.title = ((src && src.title) || first?.label || first?.content || "New chat").replace(/\s+/g, " ").trim().slice(0, 80);
   const others = state.conversations.filter((x) => x.id !== c.id);
   const merged = [structuredClone(c), ...others].sort((a, b) => b.updated - a.updated);
   state.conversations = merged.slice(0, MAX_CONVERSATIONS);
@@ -768,6 +774,7 @@ async function withPage(mode = "ask") {
   const settings = (await getState()).settings;
   state.settings = settings;
   let system = systemFor(settings, mode);
+  const prompt = { mode, edited: !isDefaultPrompt(mode, (settings.prompts || {})[mode] ?? "") };
   let source = null;
   if (settings.includePage) {
     try {
@@ -780,7 +787,7 @@ async function withPage(mode = "ask") {
       showNotice(`Could not read the page (${e.message}). Sending without it.`);
     }
   }
-  return { system, source };
+  return { system, source, prompt };
 }
 
 async function submit(preset, mode = "ask") {
@@ -792,27 +799,31 @@ async function submit(preset, mode = "ask") {
   if (!provider) return showNotice("The selected provider no longer exists.");
 
   hideNotice();
-  const { system, source } = await withPage(mode);
+  const { system, source, prompt } = await withPage(mode);
   const msg = {
     role: "user",
     content: text,
     page: source ? (source.selection ? `${source.title} (selection)` : source.title) : null,
   };
-  if (mode !== "ask") msg.mode = mode;
+  if (mode !== "ask") {
+    msg.mode = mode;
+    msg.label = MODES[mode].label;
+  }
   conv.messages.push(msg);
   if (preset === undefined) {
     input.value = "";
     autosize();
   }
-  await run(provider, system, source, mode);
+  await run(provider, system, source, mode, prompt);
 }
 
-async function run(provider, system, source, mode = "ask") {
+async function run(provider, system, source, mode = "ask", prompt = null) {
   const target = conv;
   const model = state.active.model;
   const reply = { role: "assistant", content: "" };
   if (source) reply.source = source;
   if (mode !== "ask") reply.mode = mode;
+  if (prompt) reply.prompt = prompt;
   target.messages.push(reply);
   const mine = new AbortController();
   controller = mine;
@@ -870,8 +881,8 @@ async function retry() {
   if (!provider) return showNotice("Pick a model first.");
   hideNotice();
   const mode = conv.messages.at(-1).mode || "ask";
-  const { system, source } = await withPage(mode);
-  await run(provider, system, source, mode);
+  const { system, source, prompt } = await withPage(mode);
+  await run(provider, system, source, mode, prompt);
 }
 
 init();

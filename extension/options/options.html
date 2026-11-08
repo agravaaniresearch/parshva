@@ -34,18 +34,21 @@
     <div id="presets" class="presets"></div>
 
     <h2>Prompts</h2>
-    <p class="lede">The Summarise and Context buttons at the top of the sidebar each use their own prompt. Typed questions use the Ask prompt. Edit any of them, then Save. The format line (paragraphs or list) is added automatically from the choice in the sidebar, so do not describe the format here.</p>
+    <p class="lede">The Summarise and Context buttons at the top of the sidebar each use their own prompt. Typed questions use the Ask prompt. Edit any of them, then Save. Your text is sent exactly as written. The one placeholder is <code>{format}</code>, which is replaced by the paragraph or list line chosen in the sidebar; leave it out and nothing about format is added.</p>
     <label class="field">
       <span>Summarise prompt <button type="button" class="linkbtn" data-reset="summary">Reset to default</button></span>
       <textarea id="p-summary" rows="5"></textarea>
+      <details class="preview"><summary>Show exactly what is sent</summary><pre id="pv-summary"></pre></details>
     </label>
     <label class="field">
       <span>Context prompt <button type="button" class="linkbtn" data-reset="context">Reset to default</button></span>
       <textarea id="p-context" rows="14"></textarea>
+      <details class="preview"><summary>Show exactly what is sent</summary><pre id="pv-context"></pre></details>
     </label>
     <label class="field">
       <span>Ask prompt (typed questions) <button type="button" class="linkbtn" data-reset="ask">Reset to default</button></span>
       <textarea id="p-ask" rows="4"></textarea>
+      <details class="preview"><summary>Show exactly what is sent</summary><pre id="pv-ask"></pre></details>
     </label>
     <div class="field">
       <span>Answer format</span>

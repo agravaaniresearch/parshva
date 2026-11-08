@@ -1,4 +1,4 @@
-import { DEFAULT_PROMPTS } from "./prompts.js";
+import { DEFAULT_PROMPTS, upgradePrompt } from "./prompts.js";
 
 export const api = globalThis.browser ?? globalThis.chrome;
 
@@ -32,9 +32,9 @@ export async function getState() {
   s.settings = { includePage: false, theme: "auto", format: "list", ...raw };
   // Earlier versions stored one prompt; it becomes the Context prompt.
   s.settings.prompts = {
-    context: raw.prompts?.context ?? old ?? DEFAULT_PROMPTS.context,
-    summary: raw.prompts?.summary ?? DEFAULT_PROMPTS.summary,
-    ask: raw.prompts?.ask ?? DEFAULT_PROMPTS.ask,
+    context: upgradePrompt("context", raw.prompts?.context ?? old),
+    summary: upgradePrompt("summary", raw.prompts?.summary),
+    ask: upgradePrompt("ask", raw.prompts?.ask),
   };
   return s;
 }
