@@ -1,46 +1,112 @@
-# Parshva
+<p align="center">
+  <img src="extension/icons/icon-128.png" width="96" alt="Parshva icon">
+</p>
 
-An AI chat sidebar for Firefox. Bring your own keys; requests go straight from your browser to the provider you configure.
+<h1 align="center">Parshva</h1>
 
-- Any OpenAI-compatible provider (Grok, Qwen via DashScope, OpenRouter, DeepSeek, Groq, Mistral, OpenAI, Ollama, LM Studio) plus Claude through Anthropic's native API
-- Streaming replies with Markdown, tables and copyable code blocks
-- Optional page context: sends the current page text (or your selection) with your message
-- Right-click selected text, then "Ask Parshva", to start a chat about it
-- Chat history stored locally in the browser
-- No telemetry and no accounts
+<p align="center"><em>A Firefox sidebar that gives you the context around a page, not just a summary of it.</em></p>
 
-## One-time setup for automatic XPI builds
+<p align="center">
+  <img src="docs/screenshots/hero.png" alt="Parshva in light and dark themes, showing a Context answer beside a web page" width="760">
+</p>
 
-1. Push this repository to GitHub.
-2. Create Mozilla API keys at <https://addons.mozilla.org/developers/addon/api/key/> (a free developer account is enough).
-3. In the repository go to Settings, Secrets and variables, Actions, and add two repository secrets:
-   - `AMO_JWT_ISSUER` (the "JWT issuer" value)
-   - `AMO_JWT_SECRET` (the "JWT secret" value)
-4. Push to `main`. The workflow runs the tests and the linter, bumps the version, signs the add-on on Mozilla's unlisted channel (automatic, usually a few minutes, no human review) and publishes `parshva.xpi` as a GitHub Release.
+**Parshva** (Sanskrit for "side") is an AI sidebar for Firefox. It reads the page you are on and answers using a provider you choose, with your own API keys. There is no server, no account and no telemetry. Requests go straight from your browser to the provider you configured.
 
-From then on every push that touches `extension/` produces a new signed XPI.
+## Why it exists
 
-## Installing
+Most page summarisers compress an article into fewer words. That is useful for speed, but it hides the thing a careful reader actually needs: who is speaking, what situation the page belongs to, what it assumes you already know, and what it leaves out. Parshva has two buttons for two different jobs.
 
-Download `parshva.xpi` from the latest release. In Firefox open `about:addons`, click the gear icon, choose "Install Add-on From File" and select it. Open the sidebar with the toolbar sidebar button or `Alt+Shift+P`, then add a provider under Settings.
+- **Summarise** gives at most five short points. It is deliberately cheap.
+- **Context** gives the situation behind the page in eight fixed labels: Source, Situation, Background, Actors, Framing, Evidence, Omitted and Verify. The labels are identical every time, so answers from different pages can be compared side by side.
 
-## Local development
+The default Context prompt asks the model to start from the page, to mark any background it adds with "(outside the page)", to say so when something is unclear instead of guessing, and not to treat any outlet, institution or country as a neutral default.
+
+## Screenshots
+
+The screenshots below are the shipped interface, captured in a headless browser. The model replies and the news page are invented sample content, so no real provider was called and no real article is quoted.
+
+| Context | Summarise | Model picker |
+|---|---|---|
+| <img src="docs/screenshots/sidebar-context-light.png" width="260" alt="Context answer in the light theme"> | <img src="docs/screenshots/sidebar-summary-light.png" width="260" alt="Five-point summary in the light theme"> | <img src="docs/screenshots/sidebar-model-picker.png" width="260" alt="Provider and model picker"> |
+
+| Dark theme | History | Ready state |
+|---|---|---|
+| <img src="docs/screenshots/sidebar-context-dark.png" width="260" alt="Context answer in the dark theme"> | <img src="docs/screenshots/sidebar-history.png" width="260" alt="Searchable history grouped by day"> | <img src="docs/screenshots/sidebar-empty-light.png" width="260" alt="The sidebar before any answer"> |
+
+**Settings** hold providers, editable prompts and a usage dashboard.
+
+<img src="docs/screenshots/settings-providers.png" width="720" alt="Settings page listing providers with key status">
+
+<img src="docs/screenshots/settings-prompts.png" width="720" alt="Editable Summarise, Context and Ask prompts">
+
+<img src="docs/screenshots/settings-usage.png" width="720" alt="Token usage charts and table by provider and model">
+
+## Philosophy
+
+These principles are written into the build specification and shape every feature.
+
+1. **Your prompt is the whole instruction.** The code never appends hidden text. What you save in Settings is exactly what is sent, and "Show exactly what is sent" displays it. The only substitution is the `{format}` placeholder.
+2. **Credit-sensitive.** Summarise and Context send only their own instruction, never the earlier chat. Reply length is capped where the API allows it. The page bar shows an estimated token count before you send, and each reply shows the provider's real counts.
+3. **Honest output.** Every answer records its source (page title and address), and the Copy button puts that source first, so a pasted answer never loses its origin.
+4. **Bring your own key, keep it local.** Keys live in the browser profile and are sent only to the provider they belong to. The manifest declares that no data is collected.
+5. **Small and auditable.** Plain JavaScript modules with no runtime dependencies and no build step for the extension itself. The whole code base is under three thousand lines.
+6. **A calm identity.** Warm saffron on cream in light mode, warm charcoal in dark mode, and no blue anywhere.
+
+## Features
+
+- Any OpenAI-compatible provider (Grok, Qwen via DashScope, OpenRouter, DeepSeek, Groq, Mistral, OpenAI, Ollama, LM Studio, or a custom address) plus Claude through Anthropic's native API.
+- Streaming replies with Markdown, tables and copyable code blocks. The renderer escapes everything and allows only http, https and mailto links.
+- **Page** chip: sends the current page text (or your selection) with your message. Page access is requested only when you turn it on.
+- Right-click selected text, then "Ask Parshva", to start a chat about it.
+- Paragraph or List format, remembered and applied to every answer.
+- Copy, Plain text (Markdown stripped), Retry and Clear summary buttons on each answer.
+- Searchable history grouped by day, kept locally in the browser.
+- Key testing with a status badge, and a model picker that lists only providers whose key passed.
+- Usage dashboard: tokens per day for 14 days, sent versus received by model, and a table per provider.
+- Light, Dark or Auto theme.
+
+## Install
+
+Download `parshva.xpi` from the latest [release](../../releases). In Firefox open `about:addons`, click the gear icon, choose "Install Add-on From File" and select the file. Open the sidebar from the toolbar sidebar button or with `Alt+Shift+P`, then add a provider under Settings. Firefox 140 or later is required.
+
+## Privacy
+
+Parshva has no backend. Your key and your chats stay in the browser profile, and a page is sent only to the provider you selected, and only when the Page chip is on or you use the context menu. Providers do not expose credit balances through API keys, so the usage table counts tokens rather than money.
+
+## Build and release
 
 ```
 npm install
-npm test          # parser and Markdown tests
+npm test          # provider, prompt and Markdown tests
 npm run lint      # web-ext lint
 npm run build     # unsigned zip in dist/
 npx web-ext run --source-dir extension   # launches Firefox with the extension loaded
 ```
 
+A GitHub Actions workflow ([`release.yml`](.github/workflows/release.yml)) runs the tests and linter on every push that touches `extension/`, sets the version (the committed major and minor, plus the run number as the patch), signs the add-on on Mozilla's unlisted channel and publishes `parshva.xpi` as a GitHub Release. To enable signing, create Mozilla API keys at <https://addons.mozilla.org/developers/addon/api/key/> and add them as the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. Without the secrets the workflow still builds, but the package is unsigned.
+
 ## Layout
 
 - `extension/lib/providers.js`: request building, SSE parsing and model listing for both API types
-- `extension/lib/markdown.js`: dependency-free Markdown renderer (escapes everything, allows only http, https and mailto links)
+- `extension/lib/prompts.js`: default prompts, modes and the `{format}` placeholder
+- `extension/lib/markdown.js`: dependency-free Markdown renderer
+- `extension/lib/store.js`: storage, settings migration and usage accounting
 - `extension/sidebar/`: the chat UI
-- `extension/options/`: provider and prompt settings
-- `.github/workflows/release.yml`: build, version, sign, release
+- `extension/options/`: provider, prompt and usage settings
+- `test/`: unit tests for the pure layers
+- `Parshva-Spec.md`: a self-contained specification for rebuilding Parshva in other browsers
+
+## Porting to other browsers
+
+[`Parshva-Spec.md`](Parshva-Spec.md) describes the product, the provider and prompt layers and the Firefox-to-Chromium differences in enough detail for a person or an LLM to rebuild it for Chrome, Edge or another browser.
+
+## Licence
+
+Apache 2.0. See [LICENSE](LICENSE).
+
+---
+
+# Changelog
 
 ## v0.2.0
 
